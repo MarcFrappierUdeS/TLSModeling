@@ -110,7 +110,7 @@ public class TestExaminer {
         Process openssl = null;
         try {
             openssl = OpensslLauncher.startOpenSslServer(
-                "/home/bigouden/trash/openssl/server.crt", "/home/bigouden/trash/openssl/server.key", 8443
+                "src/main/resources/session/server.crt", "src/main/resources/session/server.key", 8443
             );
         } catch (IOException e) {
             e.printStackTrace();

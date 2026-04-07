@@ -57,7 +57,7 @@ public class ModelExecuter {
         "{TLS_1_3}",
         "0",
         "{}",
-        "{rsa_pkcs1_sha256}",
+        "{rsa_pkcs1_sha25}",
         "{X25519}",
         "{TLS_AES_128_GCM_SHA256}"
     );
@@ -71,7 +71,7 @@ public class ModelExecuter {
             "supported_versions={TLS_1_3}",
             "legacy_compression_methods=0",
             "pre_shared_key={}",
-            "signature_algorithms={rsa_pkcs1_sha256}",
+            "signature_algorithms={rsa_pkcs1_sha25}",
             "supported_groups={X25519}",
             "cipher_suites={TLS_AES_128_GCM_SHA256}"
     );

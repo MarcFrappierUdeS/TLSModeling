@@ -29,7 +29,7 @@ public class ModelLoader {
 
     /** Guice injector for ProB 2.0 bindings and dependency injection */
     // private static final Injector INJECTOR = Guice.createInjector(Stage.PRODUCTION, new Config());
-
+    
     /** File path to the B-machine model specification */
     private final String modelFilePath;
 

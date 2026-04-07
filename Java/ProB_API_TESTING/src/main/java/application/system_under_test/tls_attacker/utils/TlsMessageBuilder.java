@@ -125,6 +125,8 @@ public class TlsMessageBuilder {
                         case "ecdsa_secp256r1_sha256"  -> SignatureAndHashAlgorithm.ECDSA_SHA256;
                         case "ecdsa_secp384r1_sha384"  -> SignatureAndHashAlgorithm.ECDSA_SHA384;
                         case "ed25519"                 -> SignatureAndHashAlgorithm.ED25519;
+                        case "rsa_pkcs1_sha256", "rsa_pkcs1_sha25" -> SignatureAndHashAlgorithm.RSA_SHA256;
+
                         default -> null;
                     };
                 }
@@ -298,6 +300,7 @@ public class TlsMessageBuilder {
                     case "TLS_CHACHA20_POLY1305_SHA256" -> CipherSuite.TLS_CHACHA20_POLY1305_SHA256;
                     case "TLS_AES_128_CCM_SHA256" -> CipherSuite.TLS_AES_128_CCM_SHA256;
                     case "TLS_AES_128_CCM_8_SHA256" -> CipherSuite.TLS_AES_128_CCM_8_SHA256;
+                    
                     default -> {
                         System.err.println("Cipher suite not recognized: " + trimmedSuite);
                         yield null;
