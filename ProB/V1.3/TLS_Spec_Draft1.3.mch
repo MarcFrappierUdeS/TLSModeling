@@ -85,7 +85,7 @@ SETS
 
     SIGNATURE_ALGORITHMS = { 
     	/* RSASSA-PKCS1-v1_5 algorithms */
-    	rsa_pkcs1_sha25,
+    	rsa_pkcs1_sha256,
     	rsa_pkcs1_sha384,
     	rsa_pkcs1_sha512,
     	/* ECDSA algorithms */

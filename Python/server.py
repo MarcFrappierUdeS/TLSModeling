@@ -6,8 +6,8 @@ import socket
 import http.server
 import ssl
 
-certificate_path = "/Users/alex/Desktop/School/Masters/Projet de Recherche/Code/ALL CODE/TLSModeling/Ressources/certificates_keys/server.crt"
-keyfile_path = "/Users/alex/Desktop/School/Masters/Projet de Recherche/Code/ALL CODE/TLSModeling/Ressources/certificates_keys/server.key"
+certificate_path = "../Ressources/certificates_keys/server.crt"
+keyfile_path = "../Ressources/certificates_keys/server.key"
 response = (
     "HTTP/1.1 200 OK\r\n"
     "Content-Type: text/plain\r\n"
@@ -18,8 +18,13 @@ response = (
 
 def start_HTTPS_server_using_ssl_import(host, port):
     httpd = http.server.HTTPServer((host, port),http.server.SimpleHTTPRequestHandler)
-    httpd.socket = ssl.wrap_socket(httpd.socket,certfile=certificate_path,
-                                   keyfile=keyfile_path, server_side=True, ssl_version=ssl.PROTOCOL_TLS)
+    
+    #httpd.socket = ssl.wrap_socket(httpd.socket,certfile=certificate_path,
+    #                               keyfile=keyfile_path, server_side=True, ssl_version=ssl.PROTOCOL_TLS)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile=certificate_path,keyfile=keyfile_path)
+    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+
     httpd.serve_forever()
 
 
