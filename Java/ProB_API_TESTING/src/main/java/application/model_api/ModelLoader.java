@@ -161,10 +161,16 @@ public class ModelLoader {
      * @param yamlFilePath the path to the YAML file where the generated ClientHello message will be saved
      * @return true if the ClientHello message is valid, false otherwise
     //  */
-    // public boolean generateValidClientHelloWithFindTransitions(String yamlFilePath) {
-    //     modelExecuter.createSubscription("session_machine");
-    //     return modelExecuter.generateValidClientHelloWithFindTransitions(yamlFilePath);
-    // }
+    /**
+     * Terminates the ProB StateSpace process.
+     * This method should be called when the model is no longer needed to release resources
+     * and ensure that the underlying ProB process is properly shut down.
+     */
+    public void killModel() {
+        if (model != null) {
+            model.kill();
+        }
+    }
 
 
 }

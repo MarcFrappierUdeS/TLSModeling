@@ -153,10 +153,10 @@ public class TestExaminer {
             System.out.println("ServerHello is invalid according to the model.");
         }
 
-
-        
-
-        
+        // Properly shutdown the model to release resources and allow JVM to exit
+        System.out.println("Shutting down model...");
+        this.modelLoader.killModel();
+        System.out.println("-- TLS Test Finished --");
     }
 
     /**
