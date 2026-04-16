@@ -1,9 +1,0 @@
-serverHelloInformation:
-  random: A7571A4BD741E0E9575939B59D89661E18E497A3B9AC8B00280A25839DAB3F60
-  pre_shared_key: '{}'
-  legacy_session_id_echo: x
-  legacy_version: x0303
-  supported_versions: '{TLS_1_3}'
-  legacy_compression_methods: '0'
-  key_share: '{}'
-  cipher_suites: TLS_AES_128_GCM_SHA256

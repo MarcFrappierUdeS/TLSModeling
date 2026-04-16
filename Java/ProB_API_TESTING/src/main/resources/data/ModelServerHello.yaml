@@ -1,8 +1,0 @@
-  random: 'NOT SUPPORTED IN MODEL '
-  pre_shared_key: '{}'
-  legacy_session_id_echo: x0303
-  legacy_version: x0303
-  supported_versions: '{TLS_1_3}'
-  legacy_compression_methods: '0'
-  key_share: '{}'
-  cipher_suites: TLS_AES_128_GCM_SHA256
