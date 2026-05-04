@@ -166,7 +166,16 @@ public class ModelLoader {
     //     return modelExecuter.generateValidClientHelloWithFindTransitions(yamlFilePath);
     // }
 
-
+    /**
+     * Terminates the ProB StateSpace process.
+     * This method should be called when the model is no longer needed to release resources
+     * and ensure that the underlying ProB process is properly shut down.
+     */
+    public void killModel() {
+        if (model != null) {
+            model.kill();
+        }
+    }
 }
 
 
