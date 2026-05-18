@@ -1,0 +1,18 @@
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.SolverChecker determineSatFactory
+INFOS: Using SAT solver back-end: SAT4J with timeout of 1500 ms
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.KodkodInteraction interaction
+INFOS: Starting kodkod session
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.SolverChecker determineSatFactory
+INFOS: Using SAT solver back-end: SAT4J with timeout of 2500 ms
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.KodkodSession info
+INFOS: problem 'p0': added
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.KodkodSession info
+INFOS: problem 'p0': request added
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.KodkodSession info
+INFOS: problem 'p0': list max 22 solutions
+mai 18, 2026 11:20:44 AM de.stups.probkodkod.KodkodSession info
+INFOS: problem 'p0': no more solutions, request deleted
+mai 18, 2026 11:20:47 AM de.stups.probkodkod.KodkodInteraction interaction
+INFOS: EOF reached
+mai 18, 2026 11:20:47 AM de.stups.probkodkod.KodkodInteraction interaction
+INFOS: Kodkod session finished

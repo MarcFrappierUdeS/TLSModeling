@@ -4,6 +4,7 @@ import application.config.Config;
 import application.information_handler.AbstractInformationComparator;
 import application.information_handler.InformationConvertertoAbstract;
 import application.model_api.ModelLoader;
+import application.prob.test.ProBTestRunner;
 import application.system_under_test.SystemUnderTest;
 import application.system_under_test.tls_attacker.TLSAttackerFakeClient;
 import application.system_under_test.tls_attacker.TLSAttackerSUTServer;
@@ -37,6 +38,7 @@ public class TestExaminer {
 
     /* Type of the test examiner */
     private ModelLoader modelLoader;
+    private ProBTestRunner testRunner;
 
     /* System Under Test (SUT) */
     private SystemUnderTest systemUnderTest;
@@ -64,7 +66,7 @@ public class TestExaminer {
 
         switch (type) {
             case "tls":
-                this.modelLoader = new ModelLoader(
+                /*this.modelLoader = new ModelLoader(
                     api,
                     Config.TLSMODELFILEPATH
                 );
@@ -72,7 +74,15 @@ public class TestExaminer {
                 this.systemUnderTest = new TLSAttackerSUTServer();
                 this.fakeClient = new TLSAttackerFakeClient();
 
+                break;*/
+                
+                // On initialise notre nouveau moteur de test
+                this.testRunner = new ProBTestRunner(Config.TLSMODELFILEPATH);
+                
+                this.systemUnderTest = new TLSAttackerSUTServer();
+                this.fakeClient = new TLSAttackerFakeClient();
                 break;
+                
             //Simply to show the flexibility and adaptation of the code
             case "tlsTesting":
                 this.modelLoader = new ModelLoader(
@@ -93,7 +103,39 @@ public class TestExaminer {
      * ServerHello validation against the formal model.
      */
     public void runTest() {
-        System.out.println("-- Starting TLS Test --");
+    	System.out.println("-- Starting Dynamic TLS MBT --");
+
+        // 1. Initialiser le modèle B (Constants + Initialisation)
+        testRunner.startModel();
+
+        // 2. Lancer le serveur OpenSSL en arrière-plan (SUT)
+        Process openssl = null;
+        try {
+            openssl = OpensslLauncher.startOpenSslServer(
+                "src/main/resources/openssl/server.crt", 
+                "src/main/resources/openssl/server.key", 
+                8443
+            );
+            Thread.sleep(1000); // Laisser le temps au serveur de bind le port
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // 3. Exécuter la boucle de test (La fameuse boucle ProB -> YAML -> ProB)
+        // Cette méthode va maintenant générer step_out.yaml à chaque étape
+        try {
+            testRunner.runTestLoop();
+        } finally {
+            // Nettoyage impératif
+            if (openssl != null) {
+                openssl.destroy();
+                System.out.println("OpenSSL Server stopped.");
+            }
+            testRunner.stop();
+            System.out.println("-- TLS Test Finished --");
+        }
+        
+        /*System.out.println("-- Starting TLS Test --");
 
         
         // Load model
@@ -156,7 +198,7 @@ public class TestExaminer {
         // Properly shutdown the model to release resources and allow JVM to exit
         System.out.println("Shutting down model...");
         this.modelLoader.killModel();
-        System.out.println("-- TLS Test Finished --");
+        System.out.println("-- TLS Test Finished --");*/
     }
 
     /**

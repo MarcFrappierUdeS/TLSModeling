@@ -271,63 +271,50 @@ INITIALISATION
 
 OPERATIONS
 
-    SendClientHello (legacy_version, supported_versions, legacy_compression_methods, pre_shared_key, signature_algorithms, supported_groups, cipher_suites) =
-    PRE /*Still need to add the random in the PRE*/
-        session_machine'State = SESSION_CLOSED or
-        (session_machine'State = RECEIVEHELLORETRYREQUEST & session_machine'Status = SUCCEEDED) &
-        supported_versions <: VERSION & supported_versions /= {} &
-        legacy_compression_methods : compression_method_constant &
-	    pre_shared_key <: KEYS &
-        signature_algorithms <: SIGNATURE_ALGORITHMS & signature_algorithms /= {} &
-        supported_groups <: SUPPORTED_GROUPS & supported_groups /= {} &
-        cipher_suites <: CIPHER_SUITE & cipher_suites /= {} &
-        legacy_version : VERSION_NUMBERS
-    THEN
-        client_supported_versions := supported_versions ||
-        client_legacy_compression_methods := legacy_compression_methods ||
-        client_pre_shared_key := pre_shared_key || /* It is possible for the pre_shared_key field to be empty if no symmetric key identities are known to the client */
-        client_signature_algorithms := signature_algorithms ||
-        client_supported_groups := supported_groups ||
-        client_cipher_suites := cipher_suites ||
-        client_legacy_version := legacy_version;
-        /* Simulate sending ClientHello and determine the alert message */
-        IF TLS_1_3 : client_supported_versions
-	    THEN
-               //Supported groups can be empty? -> Server will simply send helloretryrequest if so for Version 1.3 support
-               IF (client_signature_algorithms /= {}) &
-                  (client_cipher_suites /= {}) &
-                  (client_legacy_compression_methods = 0)
-                  THEN
-                     session_machine := rec(State : SENDCLIENTHELLO, Status : SUCCEEDED) ||
-                     hello_retry_request_count := 0 //Reset to 0 for each ClientHello request sent
-               ELSE
-                  /* Determine the specific reason for refusal */
-                  IF (client_supported_versions = {})  /*THIS IF CAN BE REMOVED */
-		     THEN
-                         alert_message := rec (Message : PROTOCOL_VERSION, AlertLevel : FATAL)
-                  /* If the list of cipher_suites is empty, handshake is impossible */
-                  /* If the legacy compression method is any other BYTE value other than 0 -> Return Illegal_Parameter alert*/
-		  /* Check if supported signatures algorithms is part of the available signature algorithms */
-		  /* Check if supported groups is part of the available KEM algorithms (supported groups algorithms) */
-                  ELSE IF (client_cipher_suites = {}) or
-                     not (client_legacy_compression_methods = 0) or
-                     (client_signature_algorithms = {}) or
-                     (client_supported_groups = {}) or
-                     not (client_legacy_version = TLS1_2VersionNumber)
-                     THEN
-                        alert_message := rec (Message : ILLEGAL_PARAMETER, AlertLevel : FATAL)
-                  /*If Something else is missing */
-                  ELSE
-                      alert_message := rec (Message : HANDSHAKE_FAILURE, AlertLevel : FATAL)
-                  END;
-                  session_machine := rec(State : SENDCLIENTHELLO, Status : FAILED)
-           	  END
-           END
-        ELSE
-            alert_message := rec (Message : PROTOCOL_VERSION, AlertLevel : FATAL) ||
-            session_machine := rec(State : SENDCLIENTHELLO, Status : FAILED)
-        END
-    END;
+	SendClientHello (legacy_version, supported_versions, legacy_compression_methods, pre_shared_key, signature_algorithms, supported_groups, cipher_suites) =
+	PRE 
+    	/* Vérification des états autorisés de la session */
+    	(session_machine'State = SESSION_CLOSED or 
+    	(session_machine'State = RECEIVEHELLORETRYREQUEST & session_machine'Status = SUCCEEDED)) &
+    
+	/* Typage des paramètres et contraintes d'inclusion */
+    	supported_versions <: VERSION &
+    	legacy_compression_methods : compression_method_constant &
+    	pre_shared_key <: KEYS &
+    	signature_algorithms <: SIGNATURE_ALGORITHMS &
+    	supported_groups <: SUPPORTED_GROUPS &
+    	cipher_suites <: CIPHER_SUITE &
+    	legacy_version : VERSION_NUMBERS &
+
+    	/* --- DURCISSEMENT POUR LE HAPPY PATH TLS 1.3 --- */
+    	/* On interdit à ProB de vider les ensembles indispensables au handshake */
+    	supported_versions /= {} &
+    	cipher_suites /= {} &
+    	signature_algorithms /= {} &
+    	supported_groups /= {} &
+    
+	/* On force ProB à utiliser TLS 1.3 dans les versions supportées */
+    	TLS_1_3 : supported_versions &
+    
+	/* On contraint les valeurs de compatibilité descendante (Anti-Downgrade) */
+    	legacy_compression_methods = 0 & /* TLS 1.3 interdit la compression */
+    	legacy_version = TLS1_2VersionNumber /* Constante standard du ClientHello TLS 1.3 */
+
+  THEN
+	/* Enregistrement des choix de paramètres dans l'état du modèle */
+    	client_supported_versions := supported_versions ||
+    	client_legacy_compression_methods := legacy_compression_methods ||
+    	client_pre_shared_key := pre_shared_key || 
+    	client_signature_algorithms := signature_algorithms ||
+    	client_supported_groups := supported_groups ||
+    	client_cipher_suites := cipher_suites ||
+    	client_legacy_version := legacy_version ||
+    	session_machine := rec(State : SENDCLIENTHELLO, Status : SUCCEEDED) ||
+    	hello_retry_request_count := 0
+	/* Comme le PRE garantit le Happy Path, l'état passe directement à SUCCEEDED */
+
+  END;
+
 
    /* Server Receives the ClientHello -> Parameters are not added here because there are considered in the sendclienthello operation */
     ReceiveClientHello =
@@ -449,46 +436,48 @@ OPERATIONS
         */
     END;
 
-   /* The ServerHello MUST only include extensions which are required to establish the cryptographic context and negotiate the protocol version*/
-    SendServerHello (legacy_version,legacy_session_id_echo, legacy_compression_methods, supported_versions, cipher_suites, key_share, pre_shared_key, random) =
+
+/* The ServerHello MUST only include extensions which are required to establish the cryptographic context and negotiate the protocol version*/
+    SendServerHello (legacy_version, legacy_session_id_echo, legacy_compression_methods, supported_versions, cipher_suites, key_share, pre_shared_key, random) =
     PRE
-        legacy_version : VERSION_NUMBERS & //Ignored in TLS 1.3
+        /* Typage des paramètres et contraintes d'inclusion */
+        legacy_version : VERSION_NUMBERS &
         supported_versions <: VERSION &
         legacy_session_id_echo : VERSION_NUMBERS &
         legacy_compression_methods : compression_method_constant &
-	pre_shared_key <: KEYS &
+        pre_shared_key <: KEYS &
         cipher_suites : CIPHER_SUITE &
-        supported_versions <: VERSION &
-        key_share <: KEYS  &
+        key_share <: KEYS &
         random : RANDOM_VALUE &
-        (session_machine'State = RECEIVECLIENTHELLO & session_machine'Status = SUCCEEDED)
+        
+        /* Vérification de l'état de la machine de session */
+        (session_machine'State = RECEIVECLIENTHELLO & session_machine'Status = SUCCEEDED) &
+
+        /* --- DURCISSEMENT POUR LE HAPPY PATH TLS 1.3 --- */
+        /* Contrainte de version stricte : uniquement TLS 1.3 négocié */
+        supported_versions = {TLS_1_3} &
+        
+        /* Spécification TLS 1.3 : legacy_version DOIT être égal à TLS 1.2 (Middlebox compatibility) */
+        legacy_version = TLS1_2VersionNumber & 
+        
+        /* TLS 1.3 interdit la compression */
+        legacy_compression_methods = 0 &
+        
+        /* On s'assure que les extensions cruciales ne sont pas vides */
+	key_share /= {} &          /* Le serveur DOIT envoyer sa part de clé */
+        pre_shared_key /= {}       /* Optionnel en temps normal, mais requis pour ton modèle simplifié */
+        
     THEN
-	server_supported_versions := supported_versions ||
+        /* Enregistrement des choix de paramètres dans l'état du serveur */
+        server_supported_versions := supported_versions ||
         server_legacy_compression_methods := legacy_compression_methods ||
         server_pre_shared_key := pre_shared_key || /* It is possible for the pre_shared_key field to be empty if no symmetric key identities are known to the client */
         server_cipher_suite := cipher_suites ||
         server_legacy_session_id_echo := legacy_session_id_echo ||
         server_key_share := key_share ||
-        server_legacy_version := legacy_version;
-        IF (TLS_1_3 : server_supported_versions)
-           THEN
-              IF (server_legacy_compression_methods = 0)
-                 THEN
-                    session_machine := rec(State : SENDSERVERHELLO, Status : SUCCEEDED)
-              ELSE IF not (server_legacy_compression_methods = 0)
-                 THEN
-                    alert_message := rec (Message : ILLEGAL_PARAMETER, AlertLevel : FATAL) ||
-                    session_machine := rec(State : SENDSERVERHELLO, Status : FAILED)
-              /*If Something else is missing */
-              ELSE
-                 alert_message := rec (Message : HANDSHAKE_FAILURE, AlertLevel : FATAL) ||
-                 session_machine := rec(State : SENDSERVERHELLO, Status : FAILED)
-              END
-              END
-        ELSE
-	   alert_message := rec (Message : PROTOCOL_VERSION, AlertLevel : FATAL) ||
-           session_machine := rec(State : SENDSERVERHELLO, Status : FAILED)
-	END
+        server_legacy_version := legacy_version ||
+        session_machine := rec(State : SENDSERVERHELLO, Status : SUCCEEDED)
+	/* Comme le PRE garantit le Happy Path, la session passe directement à SUCCEEDED */
     END;
 
    /*In our case, we only supported the following two extensions (signature_algorithm and supported groups) since the other extensions: legacy_version,legacy_session_id_echo,
@@ -722,29 +711,16 @@ OPERATIONS
     END;
 
     /*In this case, we are mocking the CRL list */
-    VerifyClientCertificateWithCRL =
-    PRE
-    session_machine'State = VERIFYSERVERCERTIFICATEOCSP & session_machine'Status = SUCCEEDED &
-    client_certificate_request_bool = TRUE & server_certificate_authenticated = TRUE
+
+    VerifiyServerCertificateWithCRL = 
+    PRE 
+        /* On se concentre uniquement sur la transition d'état nominale */
+        (session_machine'State = RECEIVESERVERHELLO & session_machine'Status = SUCCEEDED)
     THEN
-        IF (client_certificate'SerialNumber : crl_revocation_list)
-           THEN
-              alert_message := rec(Message : CERTIFICATE_REVOKED, AlertLevel : FATAL) ||
-              session_machine := rec(State : VERIFYCLIENTCERTIFICATECRL, Status : FAILED)
-        ELSE IF (client_certificate'CertificateTimestamp ∉  default_certificate_timestamp) /*Instead of compare a specific date, the timestamp contains a list of valid dates...simpler to verify */
-           THEN
-              alert_message := rec(Message : CERTIFICATE_EXPIRED, AlertLevel : FATAL) ||
-              session_machine := rec(State : VERIFYCLIENTCERTIFICATECRL, Status : FAILED)
-        ELSE IF (verify_client_certificate_with_ocsp = TRUE)
-           THEN
-             session_machine := rec(State : VERIFYCLIENTCERTIFICATECRL, Status : IN_PROGRESS) /*Verifiy with ocsp now to make sure - in case crl list isn't updated or something... */
-        ELSE
-           session_machine := rec(State : VERIFYCLIENTCERTIFICATECRL, Status : SUCCEEDED) ||
-           client_certificate_authenticated := TRUE
-        END
-        END
-        END
+        session_machine := rec(State : VERIFYSERVERCERTIFICATECRL, Status : SUCCEEDED) ||
+        server_certificate_authenticated := TRUE
     END;
+
 
     /*Here we will create a non-deterministic value that will determine if the certificate passes or not through OCSP.
       A boolean value will be responsible for handling it. If true -> Certificate is valid. If False -> certificate is invalid and the session will be terminated */
@@ -771,18 +747,13 @@ OPERATIONS
     /*No calculation will be made in this case. Here we only mock the client symmetric key calculation with a random value. As in DCHE caclulation, the client and the server each do on their own side the symmetric key
       calculation without communication with eachother and then at the very end make sure they have the same key by encrypting and decrypting a default message */
     CalculateClientSymmetricKey =
-    PRE
-     /*All 4 possible preceeding states */
-    (session_machine'State = VERIFYSERVERCERTIFICATECRL & session_machine'Status = SUCCEEDED) or
-    (session_machine'State = VERIFYSERVERCERTIFICATEOCSP & session_machine'Status = SUCCEEDED) or
-    (session_machine'State = VERIFYCLIENTCERTIFICATECRL & session_machine'Status = SUCCEEDED) or
-    (session_machine'State = VERIFYCLIENTCERTIFICATEOCSP & session_machine'Status = SUCCEEDED)
+    PRE  
+        (session_machine'State = VERIFYSERVERCERTIFICATECRL & session_machine'Status = SUCCEEDED)
     THEN
-       /*In general both sides should arrive at the same symmetric key by calculations. This means we will assign a symmetric key to the client that will be the same as the servers
-         This can be changed to a non-deterministic approach. Meaning if the client and the server arrive at the same symmetric key, then the handshake is completed - But it will not be implemented this way in this case*/
          client_calculated_symmetric_key := post_calculation_client_symmetric_key ||
-         session_machine := rec(State : CALCULATECLIENTSYMMETRICKEY, Status : SUCCEEDED)
-   END;
+         session_machine := rec(State : CALCULATECLIENTSYMMETRICKEY, Status : SUCCEEDED) 
+    END;
+    
 
     /*No calculation will be made in this case. Here we only mock the client symmetric key calculation with a random value. As in DCHE caclulation, the client and the server each do on their own side the symmetric key
       calculation without communication with eachother and then at the very end make sure they have the same key by encrypting and decrypting a default message */
@@ -830,55 +801,55 @@ OPERATIONS
    END;
 
 
-    /*Operation Used for Temrinating a session and reinitiaizing everything from scratch for new session to be established */
-    TerminateSession =
+    /*Operation Used for Terminating a session and reinitializing everything from scratch for new session to be established */
+    TerminateSession = 
     PRE
         session_machine'Status = FAILED
     THEN
-    	session_machine := rec(State : SESSION_CLOSED, Status : SUCCEEDED) ||
-    	alert_message := rec (Message : NONE, AlertLevel : OTHER) ||
+        session_machine := rec(State : SESSION_CLOSED, Status : SUCCEEDED) ||
+        alert_message := rec (Message : NONE, AlertLevel : OTHER) ||
 
-        /*BOOLEANS INIT */
+        /* BOOLEANS INIT */
         client_certificate_request_bool := FALSE ||
         server_certificate_authenticated := FALSE ||
         client_certificate_authenticated := FALSE ||
+    
+        /* CERTIFICATE INIT */
+        certificate_request_context := RandomValue ||
+        certificate_request_signature_algorithm := private_use ||
+        server_certificate := rec(CertificateType : X509, CertificateAuthority : ENTRUST, CertificatePublicKey : A1B1C1, CertificateTimestamp : D20251231, OCSPStatus : 0, CertificateRequestContext : A1, SerialNumber : 2) ||
+        client_certificate := rec(CertificateType : X509, CertificateAuthority : ENTRUST, CertificatePublicKey : A2B2C2, CertificateTimestamp : D20241231, OCSPStatus : 0, CertificateRequestContext : B1, SerialNumber : 2) ||
 
-    	/*CERTIFICATE INIT */
-    	certificate_request_context :=  RandomValue||
-    	certificate_request_signature_algorithm := rsa_pkcs1_sha25 ||//Will need to be changed to empty value
-    	server_certificate := rec(CertificateType : X509, CertificateAuthority : ENTRUST, CertificatePublicKey : A1B1C1, CertificateTimestamp : D20251231, OCSPStatus : 0,
-                              CertificateRequestContext : A1, SerialNumber : 2) ||
-    	client_certificate := rec(CertificateType : X509, CertificateAuthority : ENTRUST, CertificatePublicKey : A1B1C1, CertificateTimestamp : D20241231, OCSPStatus : 0,
-                              CertificateRequestContext : B1, SerialNumber : 2) ||
+        /* HELLO RETRY INIT */
+        hello_retry_request_count := 0 ||       
+        hello_retry_message := NO_CHANGE ||       
 
-    	/*HELLO RETRY INIT*/
-    	hello_retry_request_count := 0 ||
-    	hello_retry_message := NO_CHANGE ||
+        /* Client params initialisation */
+        client_pre_shared_key := EmptyValue ||
+        client_random := RandomValue ||
+        client_legacy_version := NoLegacyVersionNumber ||
+        client_version := CurrentTLSVersion ||
+        client_legacy_session_id := TLS1_2VersionNumber || 
+        client_legacy_session_id_echo := TLS1_2VersionNumber || 
+        client_legacy_compression_methods := 0 ||
+        client_cipher_suites := EmptyValue ||
+        client_key_share := KeyShare ||
+        client_signature_algorithms := EmptyValue ||
+        client_supported_groups := EmptyValue ||
+        client_supported_versions := EmptyValue ||
 
-    	/*Client params initialisation */
-    	client_pre_shared_key := EmptyValue ||
-    	client_random := RandomValue ||
-    	client_legacy_version := NoLegacyVersionNumber ||
-    	client_version := CurrentTLSVersion ||
-    	client_legacy_session_id := TLS1_2VersionNumber || /*Must be set to this value which referenciates the TLS version 1.2*/
-    	client_legacy_session_id_echo := TLS1_2VersionNumber || /*Must be set to this value which referenciates the TLS version 1.2 -> used after helloretryrequest to check if it match the legacy_session_id*/
-    	client_legacy_compression_methods := 0 ||
-    	client_cipher_suites := EmptyValue ||
-    	client_key_share := KeyShare ||
-    	client_signature_algorithms := EmptyValue ||
-    	client_supported_groups := EmptyValue ||
-    	client_supported_versions := EmptyValue ||
+        /* Server params initialisation */
+        server_random := RandomValue || 
+        server_legacy_session_id_echo := TLS1_2VersionNumber || 
+        server_cipher_suite := TLS_AES_128_GCM_SHA256 ||
+        server_legacy_compression_methods := 0 ||
+        server_supported_versions := ServerSupportedVersions ||
+        server_key_share := KeyShare ||
+        server_pre_shared_key := KeyShare ||
+        server_legacy_version := NoLegacyVersionNumber ||
+        server_supported_group := X448 ||  
+        server_signature_algorithm := private_use
+    END
 
-    	/*Server params initialisation */
-    	server_random := RandomValue ||
-    	server_legacy_session_id_echo := TLS1_2VersionNumber || /*Must be set to this value which referenciates the TLS version 1.2 -> used after helloretryrequest to check if it matchthe legacy_session_id*/
-    	server_cipher_suite := TLS_AES_128_GCM_SHA256 ||
-    	server_legacy_compression_methods := 0 ||
-    	server_supported_versions := ServerSupportedVersions ||
-    	server_key_share := KeyShare ||
-    	server_pre_shared_key := KeyShare ||
-    	server_legacy_version := NoLegacyVersionNumber ||
-    	server_supported_group := X25519 ||  //Will need to be changed to empty value
-    	server_signature_algorithm := rsa_pkcs1_sha25 //Will need to be changed to empty value
-    	END
 END
+   

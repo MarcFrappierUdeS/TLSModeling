@@ -1,86 +1,19 @@
-digraph g {
-rankdir=RL;
-    Noderoot [label="&exist;\ntrue", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-    Node1 [label="&and;\ntrue\nlegacy_compression_methods &#8712; compression\n_method_constant &and; (session_machine\'State = RECEIVECLIENTHELLO &and; session_machine\'\nStatus = SUCCEEDED) &and; (legacy_version = \nx0303 &and; legacy_session_id_echo = x0303 &and;\n legacy_compression_methods = 0 &and; suppor\nted_versi...", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node1 -> Noderoot;
-    Node2 [label="&#8712;\ntrue\nlegacy_compression_methods &#8712; compression\n_method_constant", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node2 -> Node1;
-    Node3 [label="legacy_compression_methods|0", shape="record", fillcolor="white", style="filled"]
-        Node3 -> Node2;
-    Node4 [label="compression_method_constant|\{0,1\}", shape="record", fillcolor="white", style="filled"]
-        Node4 -> Node2;
-    Node5 [label="=\ntrue\nsession_machine\'State = RECEIVECLIENTHELLO", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node5 -> Node1;
-    Node6 [label="record_field|RECEIVECLIENTHELLO", shape="record", fillcolor="white", style="filled"]
-        Node6 -> Node5;
-    Node7 [label="session_machine|rec(State:RECEIVECLIENTHELLO,Status:SUCC\nEEDED)", shape="record", fillcolor="white", style="filled"]
-        Node7 -> Node6;
-    Node8 [label="RECEIVECLIENTHELLO", shape="record", fillcolor="white", style="filled"]
-        Node8 -> Node5;
-    Node9 [label="=\ntrue\nsession_machine\'Status = SUCCEEDED", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node9 -> Node1;
-    Node10 [label="record_field|SUCCEEDED", shape="record", fillcolor="white", style="filled"]
-        Node10 -> Node9;
-    Node11 [label="session_machine|rec(State:RECEIVECLIENTHELLO,Status:SUCC\nEEDED)", shape="record", fillcolor="white", style="filled"]
-        Node11 -> Node10;
-    Node12 [label="SUCCEEDED", shape="record", fillcolor="white", style="filled"]
-        Node12 -> Node9;
-    Node13 [label="=\ntrue\nlegacy_version = x0303", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node13 -> Node1;
-    Node14 [label="legacy_version|x0303", shape="record", fillcolor="white", style="filled"]
-        Node14 -> Node13;
-    Node15 [label="x0303", shape="record", fillcolor="white", style="filled"]
-        Node15 -> Node13;
-    Node16 [label="=\ntrue\nlegacy_session_id_echo = x0303", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node16 -> Node1;
-    Node17 [label="legacy_session_id_echo|x0303", shape="record", fillcolor="white", style="filled"]
-        Node17 -> Node16;
-    Node18 [label="x0303", shape="record", fillcolor="white", style="filled"]
-        Node18 -> Node16;
-    Node19 [label="=\ntrue\nlegacy_compression_methods = 0", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node19 -> Node1;
-    Node20 [label="legacy_compression_methods|0", shape="record", fillcolor="white", style="filled"]
-        Node20 -> Node19;
-    Node21 [label="0", shape="record", fillcolor="white", style="filled"]
-        Node21 -> Node19;
-    Node22 [label="=\ntrue\nsupported_versions = \{TLS_1_3\}", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node22 -> Node1;
-    Node23 [label="supported_versions|\{TLS_1_3\}", shape="record", fillcolor="white", style="filled"]
-        Node23 -> Node22;
-    Node24 [label="\{TLS_1_3\}|\{TLS_1_3\}", shape="record", fillcolor="white", style="filled"]
-        Node24 -> Node22;
-    Node25 [label="=\ntrue\ncipher_suites = TLS_AES_128_GCM_SHA256", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node25 -> Node1;
-    Node26 [label="cipher_suites|TLS_AES_128_GCM_SHA256", shape="record", fillcolor="white", style="filled"]
-        Node26 -> Node25;
-    Node27 [label="TLS_AES_128_GCM_SHA256", shape="record", fillcolor="white", style="filled"]
-        Node27 -> Node25;
-    Node28 [label="=\ntrue\npre_shared_key = &empty;", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node28 -> Node1;
-    Node29 [label="pre_shared_key|&empty;", shape="record", fillcolor="white", style="filled"]
-        Node29 -> Node28;
-    Node30 [label="&empty;", shape="record", fillcolor="white", style="filled"]
-        Node30 -> Node28;
-    Node31 [label="=\ntrue\nrandom = A1", shape="rect", fillcolor="olivedrab2", style="filled,rounded"]
-        Node31 -> Node1;
-    Node32 [label="random|A1", shape="record", fillcolor="white", style="filled"]
-        Node32 -> Node31;
-    Node33 [label="A1", shape="record", fillcolor="white", style="filled"]
-        Node33 -> Node31;
-    Node34 [label="legacy_version|x0303", shape="record", fillcolor="white", style="filled"]
-        Node34 -> Noderoot;
-    Node35 [label="legacy_session_id_echo|x0303", shape="record", fillcolor="white", style="filled"]
-        Node35 -> Noderoot;
-    Node36 [label="legacy_compression_methods|0", shape="record", fillcolor="white", style="filled"]
-        Node36 -> Noderoot;
-    Node37 [label="supported_versions|\{TLS_1_3\}", shape="record", fillcolor="white", style="filled"]
-        Node37 -> Noderoot;
-    Node38 [label="cipher_suites|TLS_AES_128_GCM_SHA256", shape="record", fillcolor="white", style="filled"]
-        Node38 -> Noderoot;
-    Node39 [label="key_share|&empty;", shape="record", fillcolor="white", style="filled"]
-        Node39 -> Noderoot;
-    Node40 [label="pre_shared_key|&empty;", shape="record", fillcolor="white", style="filled"]
-        Node40 -> Noderoot;
-    Node41 [label="random|A1", shape="record", fillcolor="white", style="filled"]
-        Node41 -> Noderoot;
+digraph history {
+graph [nodesep=1.5, ranksep=1.5];
+0 [shape=box, color="#99BF38", fontsize=12, penwidth=2, label="ocsp_status_constant = \{0,1\},compression_method_constant = \{0,1\},certificate_serial_number = \{0,1,2,3,4,5\},\ncrl_revocation_list = \{1,2,4\},default_certificate_timestamp = \{D20231231,D20241231,D20251231\},verify_server_certificate_with_ocsp = TRUE,\nverify_client_certificate_with_ocsp = TRUE,post_calculation_server_symmetric_key = SYMMETRIC1,post_calculation_client_symmetric_key = SYMMETRIC1"];
+
+1 [shape=doubleoctagon, color="#99BF38", fontsize=12, penwidth=2, label="repeated (2)\nalert_message = rec(AlertLevel:OTHER,Message:NONE),certificate_request_context = A1,certificate_request_signature_algorithm = private_use,\nclient_calculated_symmetric_key = SYMMETRIC_DEFAULT,client_certificate = rec(CertificateAuthority:ENTRUST,CertificatePublicKey:A2B2C2,CertificateRequestContext:B1,CertificateTimestamp:D20241231,CertificateType:X509,OCSPStatus:0,SerialNumber:2),client_certificate_authenticated = FALSE,\nclient_certificate_request_bool = FALSE,client_cipher_suites = \{\},client_key_share = \{A1B1C1\},\nclient_legacy_compression_methods = 0,client_legacy_session_id = x0303,client_legacy_session_id_echo = x0303,\nclient_legacy_version = NO_VERSION,client_pre_shared_key = \{\},client_random = A1,\nclient_signature_algorithms = \{\},client_supported_groups = \{\},client_supported_versions = \{\},\nclient_version = TLS_1_3,hello_retry_message = NO_CHANGE,hello_retry_request_count = 0,\nserver_calculated_symmetric_key = SYMMETRIC_DEFAULT,server_certificate = rec(CertificateAuthority:ENTRUST,CertificatePublicKey:A1B1C1,CertificateRequestContext:A1,CertificateTimestamp:D20251231,CertificateType:X509,OCSPStatus:0,SerialNumber:2),server_certificate_authenticated = FALSE,\nserver_cipher_suite = TLS_AES_128_GCM_SHA256,server_key_share = \{A1B1C1\},server_legacy_compression_methods = 0,\nserver_legacy_session_id_echo = x0303,server_legacy_version = NO_VERSION,server_pre_shared_key = \{A1B1C1\},\nserver_random = A1,server_signature_algorithm = private_use,server_supported_group = X448,\nserver_supported_versions = \{TLS_1_1,TLS_1_2,TLS_1_3\},session_machine = rec(State:SESSION_CLOSED,Status:SUCCEEDED)"];
+
+2 [shape=box, color="#99BF38", fontsize=12, penwidth=2, label="alert_message = rec(AlertLevel:FATAL,Message:PROTOCOL_VERSION),certificate_request_context = A1,certificate_request_signature_algorithm = private_use,\nclient_calculated_symmetric_key = SYMMETRIC_DEFAULT,client_certificate = rec(CertificateAuthority:ENTRUST,CertificatePublicKey:A2B2C2,CertificateRequestContext:B1,CertificateTimestamp:D20241231,CertificateType:X509,OCSPStatus:0,SerialNumber:2),client_certificate_authenticated = FALSE,\nclient_certificate_request_bool = FALSE,client_cipher_suites = \{\},client_key_share = \{A1B1C1\},\nclient_legacy_compression_methods = 0,client_legacy_session_id = x0303,client_legacy_session_id_echo = x0303,\nclient_legacy_version = x0300,client_pre_shared_key = \{\},client_random = A1,\nclient_signature_algorithms = \{\},client_supported_groups = \{\},client_supported_versions = \{\},\nclient_version = TLS_1_3,hello_retry_message = NO_CHANGE,hello_retry_request_count = 0,\nserver_calculated_symmetric_key = SYMMETRIC_DEFAULT,server_certificate = rec(CertificateAuthority:ENTRUST,CertificatePublicKey:A1B1C1,CertificateRequestContext:A1,CertificateTimestamp:D20251231,CertificateType:X509,OCSPStatus:0,SerialNumber:2),server_certificate_authenticated = FALSE,\nserver_cipher_suite = TLS_AES_128_GCM_SHA256,server_key_share = \{A1B1C1\},server_legacy_compression_methods = 0,\nserver_legacy_session_id_echo = x0303,server_legacy_version = NO_VERSION,server_pre_shared_key = \{A1B1C1\},\nserver_random = A1,server_signature_algorithm = private_use,server_supported_group = X448,\nserver_supported_versions = \{TLS_1_1,TLS_1_2,TLS_1_3\},session_machine = rec(State:SENDCLIENTHELLO,Status:FAILED)"];
+
+root [shape=invtriangle, color="#99BF38", fontsize=12, penwidth=2, label="root"];
+
+root -> 0 [style = dotted, color = black, label="SETUP_CONSTANTS", fontsize=12];
+
+0 -> 1 [color = "#006391", label="INITIALISATION", fontsize=12];
+
+1 -> 2 [color = "#006391", label="SendClientHello(x0300,\{\},0,\{\},\{\},\{\},\{\})", fontsize=12];
+
+2 -> 1 [color = "#006391", label="TerminateSession", fontsize=12];
+
 }
