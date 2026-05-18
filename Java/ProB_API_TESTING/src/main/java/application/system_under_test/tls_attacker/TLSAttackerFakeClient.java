@@ -179,7 +179,7 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
                  */
 
                 // Add extensions manually via the Builder to ensure they match the YAML exactly
-                TlsMessageBuilder.addExtensionsToClientHello(clientHelloMap, clientHello);
+                //TlsMessageBuilder.addExtensionsToClientHello(clientHelloMap, clientHello);
 
                 // EXECUTION: Manual send action
                 System.out.println("[Client] Sending ClientHello...");
