@@ -63,4 +63,38 @@ public class TlsYamlParser {
             throw new RuntimeException("Failed to write YAML file: " + filename, e);
         }
     }
+
+    /**
+     * Parses a prob_command.yaml file.
+     */
+    public static ProbCommand parseProbCommand(String filePath) {
+        Map<String, Object> data = readYamlAsObject(filePath);
+        ProbCommand cmd = new ProbCommand();
+        cmd.setAction((String) data.get("action"));
+        cmd.setMessageType((String) data.get("messageType"));
+        cmd.setParameters((Map<String, Object>) data.get("parameters"));
+        return cmd;
+    }
+
+    /**
+     * Writes a TlsEventResult to a tls_event.yaml file.
+     */
+    public static void writeTlsEvent(TlsEventResult result, String filePath) {
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        
+        // Use a map to avoid class tags like !!application.system_under_test...
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("status", result.getStatus());
+        data.put("messageType", result.getMessageType());
+        data.put("extractedParameters", result.getExtractedParameters());
+        
+        Yaml yaml = new Yaml(options);
+        try (FileWriter writer = new FileWriter(filePath)) {
+            yaml.dump(data, writer);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to write TLS event: " + filePath, e);
+        }
+    }
 }

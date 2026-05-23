@@ -176,6 +176,10 @@ public class ModelLoader {
             model.kill();
         }
     }
+
+    public ModelExecuter getModelExecuter() {
+        return modelExecuter;
+    }
 }
 
 

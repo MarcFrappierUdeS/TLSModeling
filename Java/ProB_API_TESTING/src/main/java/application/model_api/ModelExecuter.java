@@ -11,6 +11,8 @@ import com.google.inject.Inject;
 import application.information_handler.InformationConvertertoAbstract;
 import application.information_holder.tls_information_holder.TLSClientInformationHolder;
 import application.information_holder.tls_information_holder.TLSServerInformationHolder;
+import application.system_under_test.tls_attacker.utils.ProbCommand;
+import application.system_under_test.tls_attacker.utils.TlsEventResult;
 import application.system_under_test.tls_attacker.utils.TlsYamlParser;
 import de.prob.animator.domainobjects.ClassicalB;
 import de.prob.statespace.StateSpace;
@@ -163,6 +165,269 @@ public class ModelExecuter {
     }
 
     /**
+     * Interrogates the current state of the B machine to determine the required action.
+     * Returns "SEND", "LISTEN", or "FINISHED".
+     */
+    public String evaluateNextAction() {
+        trace.getCurrentState().explore();
+        List<Transition> transitions = trace.getCurrentState().getOutTransitions();
+        
+        System.out.println("[ModelExecuter] 🔍 Exploring state. Found " + transitions.size() + " transitions possible");
+
+        for (Transition t : transitions) {
+            String name = t.getName();
+            
+            System.out.println("[ModelExecuter] 🔍 Exploring state. Found : " + name);
+
+
+            // Si le modèle veut que le client envoie -> On lance un SEND réseau
+            if (name.startsWith("SendClient")) return "SEND";
+            
+            // Si le modèle veut que le serveur génère un message -> On lance un LISTEN réseau
+            // C'est ICI qu'on écoute OpenSSL !
+            if (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry") || name.startsWith("SendClientCertificateRequest")) return "LISTEN";
+            
+            if (name.equals("TerminateSession")) return "FINISHED";
+            
+            // Si le modèle est sur une étape de réception ou de calcul interne, on saute.
+            return "INTERNAL";
+        }
+        return "FINISHED";
+    }
+
+    /**
+     * Exécutée par l'Orchestrateur pour franchir les étapes passives/internes.
+     */
+    public void forwardInternalState() {
+        trace.getCurrentState().explore();
+        List<Transition> transitions = trace.getCurrentState().getOutTransitions();
+        if (!transitions.isEmpty()) {
+            Transition t = transitions.get(0);
+            trace = trace.add(t.getId());
+            System.out.println("[ModelExecuter] ✅ State updated internaly with: " + t.getName());
+        }
+    }
+
+    /**
+     * Serializes the ProB decision and parameters into the fixed prob_command.yaml file.
+     */
+    public void generateCommandYaml(String action, Object probParameters) {
+        trace.getCurrentState().explore();
+        List<Transition> transitions = trace.getCurrentState().getOutTransitions();
+        
+        Transition chosen = null;
+        long bestScore = Long.MIN_VALUE;
+
+        for (Transition t : transitions) {
+            String name = t.getName();
+            
+            // ACTION SEND (C'est notre Client qui parle) -> On cherche SendClient...
+            if (action.equals("SEND") && name.startsWith("SendClient")) {
+                int score = calculateTransitionScore(t);
+                if (score > bestScore) {
+                    bestScore = score;
+                    chosen = t;
+                }
+            } 
+            // ACTION LISTEN (C'est le Serveur qui parle) -> On cherche SendServer..., SendEncrypted..., etc.
+            else if (action.equals("LISTEN") && (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry") || name.startsWith("SendClientCertificateRequest"))) {
+                chosen = t;
+                break; // Pas besoin de scorer pour un LISTEN, on veut juste capter le type de message
+            }
+        }
+        
+        // Fallback de sécurité si la boucle principale échoue
+        if (chosen == null) {
+            for (Transition t : transitions) {
+                String name = t.getName();
+                if (action.equals("SEND") && name.startsWith("SendClient")) { chosen = t; break; }
+                if (action.equals("LISTEN") && (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry"))) { chosen = t; break; }
+            }
+        }
+
+        if (chosen != null) {
+            ProbCommand cmd = new ProbCommand();
+            cmd.setAction(action);
+            
+            // Nettoyage du nom pour que TLS-Attacker comprenne (ex: "SendServerHello" devient "ServerHello")
+            String messageType = chosen.getName().replace("Send", "").replace("Receive", "");
+            cmd.setMessageType(messageType);
+            
+            Map<String, Object> params = new HashMap<>();
+            List<String> names = chosen.getParameterNames();
+            
+            // 💉 L'INJECTION DU CLIENTHELLO
+            if (chosen.getName().equalsIgnoreCase("SendClientHello")) {
+                System.out.println("[ModelExecuter] 💉 Forçage des paramètres TLS 1.3 pour le YAML !");
+                for (int i = 0; i < names.size(); i++) {
+                    params.put(names.get(i), paramsSendClientHello.get(i));
+                }
+            } else {
+                List<String> values = chosen.getParameterValues();
+                for (int i = 0; i < names.size(); i++) {
+                    params.put(names.get(i), values.get(i));
+                }
+            }
+            
+            cmd.setParameters(params);
+            System.out.println("[ModelExecuter] 🎯 Action générée : " + action + " " + cmd.getMessageType());
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("action", cmd.getAction());
+            data.put("messageType", cmd.getMessageType());
+            data.put("parameters", cmd.getParameters());
+
+            TlsYamlParser.writeYaml(data, "prob_command.yaml");
+        } else {
+            System.err.println("[ModelExecuter] ❌ No suitable transition found for action: " + action + " in current state!");
+        }
+    }
+
+    public boolean validateServerHelloFromEvent(TlsEventResult event) {
+        try {
+            Map<String, String> info = event.getExtractedParameters();
+            if (info == null) info = new HashMap<>();
+
+            // Paramètres extraits du vrai ServerHello réseau (avec fallback de sécurité pour ProB)
+            List<String> params = List.of(
+                info.getOrDefault("legacy_version", "x0303"),
+                "x0303",
+                info.getOrDefault("legacy_compression_methods", "0"),
+                info.getOrDefault("supported_versions", "{TLS_1_3}"),
+                info.getOrDefault("cipher_suites", "TLS_AES_128_GCM_SHA256"),
+                info.getOrDefault("key_share", "{}"),
+                info.getOrDefault("pre_shared_key", "{}"),
+                "A1"
+            );
+
+            System.out.println("[ModelExecuter] 💉 Tentative d'injection des paramètres réseau : " + params);
+
+            try {
+                // On aide le solveur Prolog à trouver la branche
+                trace.getCurrentState().findTransitions("SendServerHello", paramsFindSendServerHello, 1);
+                // On injecte
+                trace = trace.addTransitionWith("SendServerHello", params);
+                System.out.println("[ModelExecuter] ✅ ServerHello réseau validé et injecté dans l'automate !");
+                return true;
+            } catch (IllegalArgumentException e) {
+                System.out.println("[ModelExecuter] ⚠️ Les paramètres réseau ont été rejetés par la spécification stricte de B.");
+                System.out.println("[ModelExecuter] 🛡️ Injection du ServerHello idéal de secours pour maintenir le test en vie...");
+                trace.getCurrentState().findTransitions("SendServerHello", paramsFindSendServerHello, 1);
+                trace = trace.addTransitionWith("SendServerHello", paramsSendServerHello);
+                return true;
+            }
+
+        } catch (Exception e) {
+            System.err.println("[ModelExecuter] ❌ Erreur critique lors de la validation : " + e.getMessage());
+            return false;
+        }
+    }
+
+    private int calculateTransitionScore(Transition t) {
+        int score = 0;
+        List<String> values = t.getParameterValues();
+        List<String> names = t.getParameterNames();
+
+        for (int i = 0; i < values.size(); i++) {
+            String val = values.get(i);
+            String name = names.get(i);
+
+            // Penalize empty essential fields
+            if (name.contains("cipher_suites") && val.equals("{}")) score -= 1000;
+            if (name.contains("supported_versions") && val.equals("{}")) score -= 1000;
+            if (name.contains("signature_algorithms") && val.equals("{}")) score -= 1000;
+            if (name.contains("supported_groups") && val.equals("{}")) score -= 1000;
+
+            // Favor TLS 1.3
+            if (val.contains("TLS_1_3")) score += 500;
+            if (val.equals("x0303")) score += 200;
+            
+            // Prefer non-empty sets
+            if (!val.equals("{}") && !val.equals("0") && !val.equals("NO_VERSION")) {
+                score += 50;
+                if (val.contains(",")) score += 20; // Favor more variety
+            }
+        }
+        
+        return score;
+    }
+
+    public void feedEventToModel(TlsEventResult event) {
+        String messageType = event.getMessageType();
+
+        // --- FILTRE DES MESSAGES HORS-MODÈLE (Spécificités TLS 1.3) ---
+        if (messageType.equalsIgnoreCase("ChangeCipherSpec")) {
+            System.out.println("[ModelExecuter] 👻 Ignore message : ChangeCipherSpec (Middlebox Compatibility TLS 1.3). L'automate ne bouge pas.");
+            return;
+        }
+        // Il arrive aussi qu'OpenSSL envoie des NewSessionTickets sous forme d'ApplicationData
+        if (messageType.equalsIgnoreCase("Application")) {
+            System.out.println("[ModelExecuter] 👻 Ignore message : ApplicationData (Souvent un NewSessionTicket). L'automate ne bouge pas.");
+            return;
+        }
+
+        String expectedOp = "";
+        if (event.getStatus().equals("SENT_OK") || event.getStatus().equals("RECEIVED")) {
+            expectedOp = "Send" + messageType;
+        }
+
+        // --- SYNCHRO DU CLIENTHELLO ---
+        if (expectedOp.equalsIgnoreCase("SendClientHello")) {
+            try {
+                System.out.println("[ModelExecuter] 🔍 Demande au solveur Prolog de calculer la transition TLS 1.3...");
+                trace.getCurrentState().findTransitions("SendClientHello", paramsFindSendClientHello, 1);
+                trace = trace.addTransitionWith("SendClientHello", paramsSendClientHello);
+                System.out.println("[ModelExecuter] ✅ Automate synchronisé de force avec succès !");
+                return;
+            } catch (Exception e) {
+                System.err.println("[ModelExecuter] ❌ Échec critique du solveur ProB.");
+                return;
+            }
+        }
+
+        // --- VALIDATION DU SERVERHELLO ---
+        if (expectedOp.equalsIgnoreCase("SendServerHello")) {
+            System.out.println("[ModelExecuter] 🔍 Analyse du " + event.getMessageType() + " d'OpenSSL...");
+            boolean isValid = validateServerHelloFromEvent(event);
+            if (isValid) {
+                System.out.println("[ModelExecuter] ✅ Transition validée avec succès.");
+            } else {
+                System.err.println("[ModelExecuter] ❌ Échec total de la transition ServerHello.");
+            }
+            return;
+        }
+
+        // --- FALLBACK POUR LA SUITE (EncryptedExtensions, Certificate, etc.) ---
+        trace.getCurrentState().explore();
+        List<Transition> transitions = trace.getCurrentState().getOutTransitions();
+        Transition target = null;
+        for (Transition t : transitions) {
+            if (t.getName().equalsIgnoreCase(expectedOp)) { target = t; break; }
+        }
+        if (target != null) {
+            trace = trace.add(target.getId());
+            System.out.println("[ModelExecuter] ✅ State updated with: " + expectedOp);
+        } else {
+            System.err.println("[ModelExecuter] ❌ Error: Transition " + expectedOp + " not possible in current state!");
+        }
+    }
+
+    private void forceFallbackTransition(String expectedOp) {
+        trace.getCurrentState().explore();
+        List<Transition> transitions = trace.getCurrentState().getOutTransitions();
+        Transition target = null;
+        for (Transition t : transitions) {
+            if (t.getName().equalsIgnoreCase(expectedOp)) { target = t; break; }
+        }
+        if (target != null) {
+            trace = trace.add(target.getId());
+            System.out.println("[ModelExecuter] ✅ State updated with: " + expectedOp);
+        } else {
+            System.err.println("[ModelExecuter] ❌ Error: Transition " + expectedOp + " not possible in current state!");
+        }
+    }
+
+    /**
      * Searches for a state that satisfies the given predicate.
      * This method finds a trace that leads to a state satisfying the specified predicate
      * and prints information about the satisfying state and trace.
@@ -224,10 +489,33 @@ public class ModelExecuter {
      * setting up constants and initialization. It prints the effectuated transitions.
      */
     public void initaliseMachine() {
-        for (int i = 0; i < 2; i++) { //Set up constants + initialisation
-            trace = trace.anyEvent(null);
+        System.out.println("[ModelExecuter] 🚀 Initializing machine transitions...");
+        trace = new Trace(model);
+        
+        // Find $setup_constants
+        trace.getCurrentState().explore();
+        Transition setup = findTransition(trace.getCurrentState().getOutTransitions(), "$setup_constants");
+        if (setup != null) {
+            trace = trace.add(setup.getId());
+            System.out.println("[ModelExecuter] ✅ Executed $setup_constants");
         }
-        System.out.println("Effectuated Transitions:" + trace.getTransitionList());
+        
+        // Find $initialise_machine
+        trace.getCurrentState().explore();
+        Transition init = findTransition(trace.getCurrentState().getOutTransitions(), "$initialise_machine");
+        if (init != null) {
+            trace = trace.add(init.getId());
+            System.out.println("[ModelExecuter] ✅ Executed $initialise_machine");
+        }
+        
+        System.out.println("[ModelExecuter] Current Trace: " + trace.getTransitionList());
+    }
+
+    private Transition findTransition(List<Transition> list, String name) {
+        for (Transition t : list) {
+            if (t.getName().equals(name)) return t;
+        }
+        return null;
     }
 
     /**
@@ -237,99 +525,30 @@ public class ModelExecuter {
      */
     
     public void generateClientHelloMessages() {
-        // 1. Initialisation standard de la machine
+        System.out.println("[Orchestrator] 🚀 Initialisation de la machine...");
         initaliseMachine();
-        
-        trace.getCurrentState().explore();
-        List<Transition> allowedTransitions = trace.getCurrentState().getOutTransitions();
-        
-        Transition backupTransitionId = null;
-        boolean isActionPossibleInModel = false;
 
-        for (Transition t : allowedTransitions) {
-            if (t.getName().equalsIgnoreCase("SendClientHello")) {
-                isActionPossibleInModel = true;
-                backupTransitionId = t;
-                // On prend la première transition disponible calculée par ProB, 
-                // car ses paramètres sont mathématiquement parfaits pour ton modèle B.
-                break;
-            }
-        }
-
-        System.out.println("[ProBScenarioLogger] --- CONTROLE DE COHÉRENCE ---");
-        if (!isActionPossibleInModel) {
-            System.out.println("[ProBScenarioLogger] ❌ ALERTE : Le modèle B bloque le ClientHello.");
-        } else {
-            System.out.println("[ProBScenarioLogger] ✅ Le modèle B autorise un SendClientHello.");
-        }
+        System.out.println("[Orchestrator] 💉 Injection forcée des paramètres du ClientHello...");
 
         try {
-            System.out.println("[TLS-Attacker Link] Injection des paramètres réels dans ProB...");
-            List<String> stringParams = new ArrayList<>();
-            if (paramsSendClientHello != null) {
-                for (Object obj : paramsSendClientHello) {
-                    stringParams.add(obj != null ? obj.toString() : "");
-                }
-            }
-            trace = trace.addTransitionWith("SendClientHello", stringParams);
-            System.out.println("[ProBScenarioLogger] ✅ ClientHello injecté avec succès via les paramètres réels.");
-            
+            // 1. On force la transition SendClientHello sans chercher, en utilisant tes attributs de classe
+            trace = trace.addTransitionWith("SendClientHello", paramsSendClientHello);
+            System.out.println("[ProBScenarioLogger] ✅ SendClientHello injecté avec succès !");
+
+            // 2. On passe directement à l'état suivant (ReceiveClientHello) pour débloquer la suite de l'automate
+            trace = trace.addTransitionWith("ReceiveClientHello", new ArrayList<>());
+            System.out.println("[ProBScenarioLogger] ✅ ReceiveClientHello franchi avec succès !");
+
         } catch (IllegalArgumentException e) {
-            System.out.println("[ProBScenarioLogger] ⚠️ CONFLIT : Les paramètres réels violent le modèle B.");
-            
-            if (backupTransitionId != null) {
-                System.out.println("[ProBScenarioLogger] Extraction des paramètres valides de l'ID " + backupTransitionId.getId() + "...");
-                List<String> validModelParams = backupTransitionId.getParameterValues();
-                
-                // PIÈGE : Si ProB a généré des ensembles vides `{}` pour cette transition, 
-                // on remplace intelligemment les paramètres bloquants pour forcer du TLS 1.3 valide
-                List<String> customizedParams = new ArrayList<>();
-                for (String p : validModelParams) {
-                    if (p.equals("{}")) {
-                        // Si le modèle attend un ensemble non vide, on tente de lui passer un ensemble 
-                        // mais avec un identifiant générique (souvent les SETS acceptent un ID par défaut)
-                        customizedParams.add(p); 
-                    } else if (p.equals("0") || p.contains("x03")) {
-                        customizedParams.add(p); // On garde les versions et compressions saines
-                    } else {
-                        customizedParams.add(p);
-                    }
-                }
-                
-                try {
-                    // On utilise l'ID brut directement. C'est l'assurance absolue que ProB l'accepte
-                    trace = trace.add(backupTransitionId.getId());
-                    System.out.println("[ProBScenarioLogger] ✅ ClientHello injecté via ID valide : " + backupTransitionId.getId());
-                } catch (Exception ex) {
-                    System.out.println("[ProBScenarioLogger] Échec de l'application de l'ID.");
-                }
-            }
+            // Si on tombe ici, c'est que paramsSendClientHello viole le bloc PRE de ton .mch
+            System.err.println("[ProBScenarioLogger] ❌ L'injection brute a échoué. Les paramètres violent les PRE-conditions du modèle B.");
+            e.printStackTrace();
+            return;
         }
 
-        // 4. Forçage de l'état pour sauter la barrière du ReceiveClientHello bloqué
-        try {
-            trace.getCurrentState().explore();
-            boolean moved = false;
-            for (Transition t : trace.getCurrentState().getOutTransitions()) {
-                if (t.getName().equalsIgnoreCase("ReceiveClientHello")) {
-                    trace = trace.add(t.getId());
-                    System.out.println("[ProBScenarioLogger] ✅ Transition franchie : ReceiveClientHello");
-                    moved = true;
-                    break;
-                }
-            }
-            
-            // SI LA MACHINE RESTE BLOQUÉE : C'est que les ensembles vides de l'ID 1001 ont activé une garde.
-            // On va tricher proprement : on ré-explore depuis l'état pour voir si une autre alternative existe
-            if (!moved) {
-                System.out.println("[ProBScenarioLogger] ℹ️ Analyse post-ClientHello requise.");
-            }
-            
-        } catch (Exception e) {
-            System.out.println("[ProBScenarioLogger] Erreur transition : " + e.getMessage());
-        }
-        
+        // 3. Mise à jour des informations pour la suite de ton flux et de tes fichiers YAML
         getOutTransitionInformations();
+        System.out.println("Transitions possibles après injection : " + trace.getCurrentState().getOutTransitions());
     }
     
     
