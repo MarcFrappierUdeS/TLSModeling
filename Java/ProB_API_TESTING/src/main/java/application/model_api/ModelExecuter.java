@@ -114,7 +114,7 @@ public class ModelExecuter {
      * Used in post-ServerHello handshake phases.
      */
     private final List<String> paramsSendEncryptedExtensions = Arrays.asList(
-            "rsa_pss_rsae_sha256",
+            "rsa_pss_rsae_sha25",
             "X25519"
     );
 
@@ -169,31 +169,40 @@ public class ModelExecuter {
      * Returns "SEND", "LISTEN", or "FINISHED".
      */
     public String evaluateNextAction() {
-        trace.getCurrentState().explore();
-        List<Transition> transitions = trace.getCurrentState().getOutTransitions();
-        
-        System.out.println("[ModelExecuter] 🔍 Exploring state. Found " + transitions.size() + " transitions possible");
-
-        for (Transition t : transitions) {
-            String name = t.getName();
-            
-            System.out.println("[ModelExecuter] 🔍 Exploring state. Found : " + name);
-
-
-            // Si le modèle veut que le client envoie -> On lance un SEND réseau
-            if (name.startsWith("SendClient")) return "SEND";
-            
-            // Si le modèle veut que le serveur génère un message -> On lance un LISTEN réseau
-            // C'est ICI qu'on écoute OpenSSL !
-            if (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry") || name.startsWith("SendClientCertificateRequest")) return "LISTEN";
-            
-            if (name.equals("TerminateSession")) return "FINISHED";
-            
-            // Si le modèle est sur une étape de réception ou de calcul interne, on saute.
-            return "INTERNAL";
-        }
+    trace.getCurrentState().explore();
+    List<Transition> transitions = trace.getCurrentState().getOutTransitions();
+    
+    // Si on arrive au bout (0 transition), on force la fin
+    if (transitions.isEmpty()) {
         return "FINISHED";
     }
+    
+    System.out.println("[ModelExecuter] 🔍 Exploring state. Found " + transitions.size() + " transitions possible");
+
+    for (Transition t : transitions) {
+        String name = t.getName();
+        System.out.println("[ModelExecuter] 🔍 Exploring state. Found : " + name);
+
+        // 1. LES EXCEPTIONS EXACTES D'ABORD
+        if (name.equals("SendClientCertificateRequest")) return "LISTEN";
+        
+        // 🌟 NOUVEAU : Gérer la fin du handshake réseau
+        if (name.equals("ServerFinished")) return "LISTEN";
+        if (name.equals("ClientFinished")) return "SEND";
+
+        // 2. LE CAS GÉNÉRAL CLIENT
+        if (name.startsWith("SendClient")) return "SEND";
+        
+        // 3. LE CAS GÉNÉRAL SERVEUR
+        if (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry")) return "LISTEN";
+        
+        if (name.equals("TerminateSession")) return "FINISHED";
+        
+        // Si le modèle est sur une étape de réception (Receive...) ou de calcul (Verify..., Calculate...), on saute.
+        return "INTERNAL";
+    }
+    return "FINISHED";
+}
 
     /**
      * Exécutée par l'Orchestrateur pour franchir les étapes passives/internes.
@@ -221,18 +230,19 @@ public class ModelExecuter {
         for (Transition t : transitions) {
             String name = t.getName();
             
-            // ACTION SEND (C'est notre Client qui parle) -> On cherche SendClient...
-            if (action.equals("SEND") && name.startsWith("SendClient")) {
+            // ACTION SEND : C'est notre Client qui parle (SendClient... OU ClientFinished)
+            // On exclut toujours le CertificateRequest
+            if (action.equals("SEND") && (name.startsWith("SendClient") || name.equals("ClientFinished")) && !name.equals("SendClientCertificateRequest")) {
                 int score = calculateTransitionScore(t);
                 if (score > bestScore) {
                     bestScore = score;
                     chosen = t;
                 }
             } 
-            // ACTION LISTEN (C'est le Serveur qui parle) -> On cherche SendServer..., SendEncrypted..., etc.
-            else if (action.equals("LISTEN") && (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry") || name.startsWith("SendClientCertificateRequest"))) {
+            // ACTION LISTEN : C'est le Serveur qui parle (SendServer..., SendEncrypted..., CertificateRequest, OU ServerFinished)
+            else if (action.equals("LISTEN") && (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry") || name.equals("SendClientCertificateRequest") || name.equals("ServerFinished"))) {
                 chosen = t;
-                break; // Pas besoin de scorer pour un LISTEN, on veut juste capter le type de message
+                break; // Pas besoin de scorer pour un LISTEN
             }
         }
         
@@ -240,8 +250,14 @@ public class ModelExecuter {
         if (chosen == null) {
             for (Transition t : transitions) {
                 String name = t.getName();
-                if (action.equals("SEND") && name.startsWith("SendClient")) { chosen = t; break; }
-                if (action.equals("LISTEN") && (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry"))) { chosen = t; break; }
+                if (action.equals("SEND") && (name.startsWith("SendClient") || name.equals("ClientFinished")) && !name.equals("SendClientCertificateRequest")) { 
+                    chosen = t; 
+                    break; 
+                }
+                if (action.equals("LISTEN") && (name.startsWith("SendServer") || name.startsWith("SendEncrypted") || name.startsWith("SendHelloRetry") || name.equals("SendClientCertificateRequest") || name.equals("ServerFinished"))) { 
+                    chosen = t; 
+                    break; 
+                }
             }
         }
 
@@ -366,9 +382,24 @@ public class ModelExecuter {
             return;
         }
 
+        if (messageType.equalsIgnoreCase("CertificateVerify")) {
+            System.out.println("[ModelExecuter] 👻 Ignore message : CertificateVerify. L'automate ne bouge pas.");
+            return;
+        }
+
         String expectedOp = "";
         if (event.getStatus().equals("SENT_OK") || event.getStatus().equals("RECEIVED")) {
-            expectedOp = "Send" + messageType;
+            if (messageType.equalsIgnoreCase("Certificate")) {
+                expectedOp = "SendServerCertificate";
+            } else if (messageType.equalsIgnoreCase("Finished")) {
+                expectedOp = "ServerFinished";
+            } else if (messageType.equalsIgnoreCase("ClientFinished")) {
+                expectedOp = "ClientFinished";
+            }
+            else {
+                // Comportement par défaut (ex: SendServerHello)
+                expectedOp = "Send" + messageType;
+            }
         }
 
         // --- SYNCHRO DU CLIENTHELLO ---
@@ -395,6 +426,30 @@ public class ModelExecuter {
                 System.err.println("[ModelExecuter] ❌ Échec total de la transition ServerHello.");
             }
             return;
+        }
+
+        if (expectedOp.equalsIgnoreCase("SendEncryptedExtensions")) {
+            System.out.println("[ModelExecuter] 💉 Forçage des paramètres EncryptedExtensions...");
+            try {
+                trace = trace.addTransitionWith("SendEncryptedExtensions", paramsSendEncryptedExtensions);
+                System.out.println("[ModelExecuter] ✅ EncryptedExtensions injecté avec succès !");
+                return;
+            } catch (Exception e) {
+                System.err.println("[ModelExecuter] ❌ Échec de l'injection EncryptedExtensions : " + e.getMessage());
+            }
+        }
+
+        // 🌟 NOUVEAU : Forçage du Certificat (Pour éviter le TerminateSession)
+        if (expectedOp.equalsIgnoreCase("SendServerCertificate")) {
+            System.out.println("[ModelExecuter] 💉 Forçage des paramètres du Certificat...");
+            try {
+                trace.getCurrentState().findTransitions("SendServerCertificate", paramsFindSendServerCertificate, 1);
+                trace = trace.addTransitionWith("SendServerCertificate", paramsSendServerCertificate);
+                System.out.println("[ModelExecuter] ✅ Certificat valide injecté dans l'automate !");
+                return;
+            } catch (Exception e) {
+                System.err.println("[ModelExecuter] ❌ Échec de l'injection du Certificat : " + e.getMessage());
+            }
         }
 
         // --- FALLBACK POUR LA SUITE (EncryptedExtensions, Certificate, etc.) ---

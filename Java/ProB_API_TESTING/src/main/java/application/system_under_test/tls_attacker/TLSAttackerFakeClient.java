@@ -147,9 +147,16 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
             System.out.println("[Client] ⚙️ Configuring message with parameters: " + stringParams);
             TlsMessageBuilder.configureFromYaml(stringParams, config);
             ClientHelloMessage ch = new ClientHelloMessage(config);
-            TlsMessageBuilder.addExtensionsToClientHello(stringParams, ch);
+            // TlsMessageBuilder.addExtensionsToClientHello(stringParams, ch);
             msg = ch;
-        } else {
+        }
+        else if ("ClientFinished".equalsIgnoreCase(cmd.getMessageType()) || "Finished".equalsIgnoreCase(cmd.getMessageType())) {
+            System.out.println("[Client] ⚙️ Preparing FinishedMessage...");
+            // TLS-Attacker sait calculer automatiquement le HMAC cryptographique
+            // pour le message Finished grâce au contexte (state) partagé.
+            msg = new FinishedMessage();
+        } 
+        else {
             // TODO: Add other message types
             throw new UnsupportedOperationException("Send not implemented for: " + cmd.getMessageType());
         }

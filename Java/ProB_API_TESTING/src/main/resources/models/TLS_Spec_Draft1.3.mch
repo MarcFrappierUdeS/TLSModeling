@@ -566,7 +566,7 @@ OPERATIONS
     END;
 
     /*Server Sends it own certificate */
-    SendServerCertificate (raw_public_key_certificate, certificate_type, signed_certificate_timestamp, ocsp_status, certificate_authorities, server_ertificate_request_context,
+    SendServerCertificate (raw_public_key_certificate, certificate_type, signed_certificate_timestamp, ocsp_status, certificate_authorities, server_certificate_request_context,
                            serial_number)  =
     PRE
        raw_public_key_certificate : KEYS &
@@ -574,7 +574,7 @@ OPERATIONS
        signed_certificate_timestamp : TIMESTAMP &
        ocsp_status : ocsp_status_constant & 
        certificate_authorities : CERTIFICATE_AUTHORITIES &
-       server_ertificate_request_context : RANDOM_VALUE &
+       server_certificate_request_context : RANDOM_VALUE &
        serial_number : certificate_serial_number &
        (session_machine'State = SENDCLIENTCERTIFICATEREQUEST & session_machine'Status = SUCCEEDED) or //Not mandatory as client certificate request is optional
        (session_machine'State = SENDENCRYPTEDEXTENSIONS & session_machine'Status = SUCCEEDED)
