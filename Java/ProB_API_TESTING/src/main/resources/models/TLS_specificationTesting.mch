@@ -272,12 +272,12 @@ INITIALISATION
 OPERATIONS
 
     SendClientHello (legacy_version, supported_versions, legacy_compression_methods, pre_shared_key, signature_algorithms, supported_groups, cipher_suites) =
-    PRE /*Still need to add the random in the PRE*/
-        session_machine'State = SESSION_CLOSED or
-        (session_machine'State = RECEIVEHELLORETRYREQUEST & session_machine'Status = SUCCEEDED) &
+    PRE
+        (session_machine'State = SESSION_CLOSED or
+        (session_machine'State = RECEIVEHELLORETRYREQUEST & session_machine'Status = SUCCEEDED)) &
         supported_versions <: VERSION & supported_versions /= {} &
         legacy_compression_methods : compression_method_constant &
-	    pre_shared_key <: KEYS &
+        pre_shared_key <: KEYS &
         signature_algorithms <: SIGNATURE_ALGORITHMS & signature_algorithms /= {} &
         supported_groups <: SUPPORTED_GROUPS & supported_groups /= {} &
         cipher_suites <: CIPHER_SUITE & cipher_suites /= {} &

@@ -39,7 +39,7 @@ public class TestExaminer {
 
         switch (type) {
             case "tls":
-                this.modelLoader = new ModelLoader(api, Config.TLSMODELFILEPATH);
+                this.modelLoader = new ModelLoader(api, Config.TLSMODELFORTESTINGFILEPATH);
                 this.systemUnderTest = new TLSAttackerSUTServer();
                 this.fakeClient = new TLSAttackerFakeClient();
                 break;
