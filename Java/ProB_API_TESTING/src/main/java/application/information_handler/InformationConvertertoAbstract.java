@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
  */
 public class InformationConvertertoAbstract {
 
-    // Configuration YAML initialisée une seule fois
+    // YAML configuration initialized once
     private static final DumperOptions options;
     private static final Yaml yaml;
 
@@ -41,6 +41,11 @@ public class InformationConvertertoAbstract {
         yaml = new Yaml(new Representer(options), options);
     }
 
+    /**
+     * Removes the first line of a YAML file, typically used to strip global tags.
+     * 
+     * @param filePath The path to the YAML file to process.
+     */
     public static void removeGlobalTagsYaml(String filePath) {
         try {
             Path path = Paths.get(filePath).toAbsolutePath();
@@ -60,6 +65,12 @@ public class InformationConvertertoAbstract {
         }
     }
 
+    /**
+     * Serializes a Java object to a YAML file.
+     * 
+     * @param obj The object to serialize.
+     * @param filePath The destination file path.
+     */
     public static void serializeToYAML(Object obj, String filePath) {
         try {
             Path path = Paths.get(filePath).toAbsolutePath();
@@ -75,12 +86,21 @@ public class InformationConvertertoAbstract {
         }
     }
 
+    /**
+     * Reconfigures global YAML dumper options.
+     */
     public static void configureYAML() {
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         options.setPrettyFlow(true);
         options.setExplicitStart(false);
     }
 
+    /**
+     * Loads YAML content from a file into a Map.
+     * 
+     * @param yamlFilePath The path to the YAML file.
+     * @return A map representation of the YAML data, or null if loading fails.
+     */
     public static Map<String, Object> retreiveYamlInformation(String yamlFilePath) {
         try {
             Path path = Paths.get(yamlFilePath).toAbsolutePath();
@@ -102,6 +122,9 @@ public class InformationConvertertoAbstract {
 
     /**
      * Extracts abstract data from a raw TLS-Attacker message.
+     * 
+     * @param message The protocol message to parse.
+     * @return A map of abstract property-value pairs.
      */
     public static Map<String, String> extractAbstractData(ProtocolMessage message) {
         if (message instanceof ServerHelloMessage) {
@@ -121,7 +144,10 @@ public class InformationConvertertoAbstract {
     }
 
     /**
-     * Builds concrete configuration/message from abstract ProB data.
+     * Identity mapping for abstract ProB data.
+     * 
+     * @param probMessage The input map.
+     * @return The same map.
      */
     public static Object buildFromAbstract(Map<String, String> probMessage) {
         return probMessage; 

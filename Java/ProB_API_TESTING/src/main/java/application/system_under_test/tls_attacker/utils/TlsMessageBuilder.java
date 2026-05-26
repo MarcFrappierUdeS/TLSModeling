@@ -159,12 +159,12 @@ public class TlsMessageBuilder {
 
 
     private static byte[] encodePublicKey(NamedGroup group, PublicKey pubKey) {
-        // Pour X25519 / X448 : getEncoded() renvoie déjà les octets bruts
+        // For X25519 / X448: getEncoded() already returns the raw bytes
         if (group == NamedGroup.ECDH_X25519 || group == NamedGroup.ECDH_X448) {
             return pubKey.getEncoded();
         }
 
-        // Pour SECP256R1 / SECP384R1 : il faut extraire le point EC non compressé
+        // For SECP256R1 / SECP384R1: extract the uncompressed EC point
         if (pubKey instanceof java.security.interfaces.ECPublicKey ecPub) {
             java.security.spec.ECPoint w = ecPub.getW();
             int fieldSize = ecPub.getParams().getCurve().getField().getFieldSize();
@@ -174,7 +174,7 @@ public class TlsMessageBuilder {
             byte[] yb = toFixedLength(w.getAffineY().toByteArray(), byteLen);
 
             byte[] uncompressed = new byte[1 + xb.length + yb.length];
-            uncompressed[0] = 0x04; // format uncompressed
+            uncompressed[0] = 0x04; // Uncompressed format indicator
             System.arraycopy(xb, 0, uncompressed, 1, xb.length);
             System.arraycopy(yb, 0, uncompressed, 1 + xb.length, yb.length);
 
@@ -196,13 +196,23 @@ public class TlsMessageBuilder {
     }
 
     /**
-     * Allows you to retrieve the private key associated with a group for calculating the shared secret.
+     * Retrieves the ephemeral private key associated with a specific named group.
+     * 
+     * @param group The named group.
+     * @return The stored private key, or null if none exists.
      */
     public static PrivateKey getPrivateKey(NamedGroup group) {
         return ephemeralPrivateKeys.get(group);
     }
 
 
+    /**
+     * Generates a cryptographic key pair for the specified named group.
+     * 
+     * @param group The named group (e.g., X25519, SECP256R1).
+     * @return The generated KeyPair.
+     * @throws Exception If key generation fails.
+     */
     public static KeyPair generateKeyPair(NamedGroup group) throws Exception {
         Security.addProvider(new BouncyCastleProvider());
 
@@ -234,10 +244,14 @@ public class TlsMessageBuilder {
     static {
         Security.addProvider(new BouncyCastleProvider());
     }
+
     /**
-     * Builds a KeyShareExtensionMessage from YAML data.
-     * @param data The YAML data
-     * @return The built extension message
+     * Builds a KeyShareExtensionMessage from abstract YAML data.
+     * Generates a new ephemeral key pair for the specified group.
+     * 
+     * @param data The YAML data containing key_share_group.
+     * @return The built extension message.
+     * @throws Exception If key generation or encoding fails.
      */
     public static KeyShareExtensionMessage buildKeyShare(Map<String, String> data) throws Exception {
         KeyShareExtensionMessage keyShare = new KeyShareExtensionMessage();
@@ -252,16 +266,16 @@ public class TlsMessageBuilder {
             case "secp256r1" -> NamedGroup.SECP256R1;
             case "secp384r1" -> NamedGroup.SECP384R1;
             default -> {
-                System.err.println("Unknown group: " + groupStr + " — fallback to X25519");
+                System.err.println("Unknown group: " + groupStr + " - fallback to X25519");
                 yield NamedGroup.ECDH_X25519;
             }
         };
 
-        // Genrate ephemeral private/public key
+        // Generate ephemeral private/public key
         KeyPair kp = generateKeyPair(group);
         ephemeralPrivateKeys.put(group, kp.getPrivate());
 
-        // Encode the public key in the format expected by TLS
+        // Encode the public key for TLS transmission
         byte[] encodedPubKey = encodePublicKey(group, kp.getPublic());
 
         // Create KeyShare entry
@@ -277,15 +291,14 @@ public class TlsMessageBuilder {
 
 
     /**
-     * Builds a list of CipherSuite from YAML data.
-     * @param data The YAML data
-     * @return List of cipher suites
+     * Builds a list of CipherSuite objects from abstract YAML data.
+     * 
+     * @param data The YAML data containing the cipher_suites field.
+     * @return A list of matching CipherSuite constants.
      */
     public static List<CipherSuite> buildCipherSuites(Map<String, String> data) {
         List<CipherSuite> suites = new ArrayList<>();
         String cipherSuitesStr = data.get("cipher_suites");
-        
-        System.out.println("DEBUG: cipher_suites from YAML: " + cipherSuitesStr);
         
         if (cipherSuitesStr != null && !cipherSuitesStr.isEmpty()) {
             // Remove brackets and split by comma
@@ -308,25 +321,23 @@ public class TlsMessageBuilder {
                 };
                 if (cs != null) {
                     suites.add(cs);
-                    System.out.println("DEBUG: Added cipher suite: " + cs.name());
                 }
             }
         }
         
         // Fallback to default if no valid suites found
         if (suites.isEmpty()) {
-            System.out.println("DEBUG: No cipher suites parsed, adding default");
             suites.add(CipherSuite.TLS_AES_128_GCM_SHA256);
         }
         
-        System.out.println("DEBUG: Total cipher suites: " + suites.size());
         return suites;
     }
 
     /**
      * Builds an EllipticCurvesExtensionMessage (supported groups) from YAML data.
-     * @param data The YAML data
-     * @return The built extension message
+     * 
+     * @param data The YAML data containing supported_groups.
+     * @return The built extension message.
      */
     public static EllipticCurvesExtensionMessage buildSupportedGroupsExtension(Map<String, String> data) {
         EllipticCurvesExtensionMessage groupsExt = new EllipticCurvesExtensionMessage();
@@ -350,15 +361,15 @@ public class TlsMessageBuilder {
     }
 
     /**
-     * Builds a list of NamedGroup from YAML data.
-     * @param data The YAML data
-     * @return List of named groups
+     * Builds a list of NamedGroup objects from abstract YAML data.
+     * Supports both hex values (from model) and string names.
+     * 
+     * @param data The YAML data containing the supported_groups field.
+     * @return A list of matching NamedGroup constants.
      */
     public static List<NamedGroup> buildNamedGroups(Map<String, String> data) {
         List<NamedGroup> groups = new ArrayList<>();
         String groupsStr = data.get("supported_groups");
-        
-        System.out.println("DEBUG: supported_groups from YAML: " + groupsStr);
         
         if (groupsStr != null && !groupsStr.isEmpty()) {
             // Remove brackets and split by comma
@@ -386,28 +397,25 @@ public class TlsMessageBuilder {
                 };
                 if (ng != null) {
                     groups.add(ng);
-                    System.out.println("DEBUG: Added named group: " + ng.name());
                 }
             }
         }
         
         // Fallback to default if no valid groups found
         if (groups.isEmpty()) {
-            System.out.println("DEBUG: No named groups parsed, adding default");
             groups.add(NamedGroup.ECDH_X25519);
             groups.add(NamedGroup.SECP256R1);
         }
         
-        System.out.println("DEBUG: Total named groups: " + groups.size());
         return groups;
     }
 
     /**
-     * Configures TLS-Attacker Config from YAML data BEFORE creating ClientHello.
-     * This ensures cipher suites and other settings are applied correctly.
+     * Configures the TLS-Attacker configuration object based on abstract model parameters.
+     * This should be called before message instantiation to ensure the stack is correctly initialized.
      * 
-     * @param clientHelloMap The YAML data containing client hello fields
-     * @param config The TLS configuration to update
+     * @param clientHelloMap The abstract parameters.
+     * @param config The TLS configuration to update.
      */
     public static void configureFromYaml(Map<String, String> clientHelloMap, Config config) {
         // Build and set Cipher Suites FIRST
@@ -418,11 +426,7 @@ public class TlsMessageBuilder {
         List<NamedGroup> groups = buildNamedGroups(clientHelloMap);
         config.setDefaultClientNamedGroups(groups);
         
-        System.out.println("Pre-configured " + suites.size() + " cipher suites in Config:");
-        for (CipherSuite suite : suites) {
-            System.out.println("  - " + suite.name() + " (0x" + 
-                String.format("%04X", (suite.getByteValue()[0] & 0xFF) << 8 | (suite.getByteValue()[1] & 0xFF)) + ")");
-        }
+        System.out.println("SUT configured with " + suites.size() + " cipher suites and " + groups.size() + " groups.");
     }
 
     /**

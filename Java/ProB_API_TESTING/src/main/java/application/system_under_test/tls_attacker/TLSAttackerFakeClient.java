@@ -61,8 +61,9 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
 
     /**
      * Sets the path to the ClientHello YAML file to use.
-     * This allows using dynamically generated ClientHello instead of the hardcoded one.
-     * * @param yamlPath the path to the ClientHello YAML file
+     * This allows using a dynamically generated ClientHello instead of the default one.
+     * 
+     * @param yamlPath the path to the ClientHello YAML file
      */
     public void setClientHelloYamlPath(String yamlPath) {
         this.clientHelloYamlPath = yamlPath;
@@ -71,14 +72,16 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
 
     /**
      * Gets the current ClientHello YAML path.
-     * * @return the path to the ClientHello YAML file
+     * 
+     * @return the path to the ClientHello YAML file
      */
     public String getClientHelloYamlPath() {
         return this.clientHelloYamlPath;
     }
 
     /**
-     * Watches for prob_command.yaml and executes commands in a loop.
+     * Monitors the file system for prob_command.yaml and executes commands as they appear.
+     * This method runs in a continuous loop until interrupted.
      */
     public void startCommandWatcher() {
         System.out.println("[Client] Starting command watcher on prob_command.yaml...");
@@ -91,7 +94,7 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
                     System.out.println("[Client] Command file detected. Reading...");
                     ProbCommand cmd = TlsYamlParser.parseProbCommand(commandFile);
                     
-                    // Delete the command file so we don't process it twice
+                    // Delete the command file to prevent re-processing
                     file.delete();
                     
                     executeCommand(cmd);
@@ -99,14 +102,14 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
                     System.err.println("[Client] Error executing command: " + e.getMessage());
                     e.printStackTrace();
                     
-                    // Write error event
+                    // Report error event to the orchestrator
                     TlsEventResult errorEvent = new TlsEventResult("FAILURE", "ERROR", Map.of("error", e.getMessage()));
                     TlsYamlParser.writeTlsEvent(errorEvent, "tls_event.yaml");
                 }
             }
             
             try {
-                Thread.sleep(500); // Poll every 500ms
+                Thread.sleep(500); // Poll frequency: 500ms
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -115,7 +118,10 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
     }
 
     /**
-     * Dispatches the command to send or listen.
+     * Dispatches the instruction to either send a message or listen for a network event.
+     * 
+     * @param cmd The command object parsed from the model's decision.
+     * @throws Exception If command execution fails.
      */
     public void executeCommand(ProbCommand cmd) throws Exception {
         System.out.println("[Client] Executing " + cmd.getAction() + " for " + cmd.getMessageType());
@@ -129,69 +135,73 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
     }
 
     /**
-     * Executes a SEND action.
+     * Executes a network SEND operation based on the model's parameters.
+     * 
+     * @param cmd The command containing message type and parameters.
+     * @throws Exception If the transmission fails.
      */
     private void executeSend(ProbCommand cmd) throws Exception {
         connect();
         
-        System.out.println("[Client] 📤 Preparing to send: " + cmd.getMessageType());
+        System.out.println("[Client] Preparing to send: " + cmd.getMessageType());
         ProtocolMessage msg = null;
         if ("ClientHello".equalsIgnoreCase(cmd.getMessageType())) {
-            // Convert Map<String, Object> to Map<String, String> for TlsMessageBuilder
+            // Map generic parameters to the TLS-Attacker configuration
             Map<String, String> stringParams = new LinkedHashMap<>();
             cmd.getParameters().forEach((k, v) -> {
                 String val = String.valueOf(v);
                 stringParams.put(k, val);
             });
             
-            System.out.println("[Client] ⚙️ Configuring message with parameters: " + stringParams);
+            System.out.println("[Client] Configuring message with parameters: " + stringParams);
             TlsMessageBuilder.configureFromYaml(stringParams, config);
             ClientHelloMessage ch = new ClientHelloMessage(config);
-            // TlsMessageBuilder.addExtensionsToClientHello(stringParams, ch);
             msg = ch;
         }
         else if ("ClientFinished".equalsIgnoreCase(cmd.getMessageType()) || "Finished".equalsIgnoreCase(cmd.getMessageType())) {
-            System.out.println("[Client] ⚙️ Preparing FinishedMessage...");
-            // TLS-Attacker sait calculer automatiquement le HMAC cryptographique
-            // pour le message Finished grâce au contexte (state) partagé.
+            System.out.println("[Client] Preparing FinishedMessage...");
+            // TLS-Attacker automatically calculates the cryptographic HMAC for the Finished message
+            // using the shared state context.
             msg = new FinishedMessage();
         } 
         else {
-            // TODO: Add other message types
-            throw new UnsupportedOperationException("Send not implemented for: " + cmd.getMessageType());
+            throw new UnsupportedOperationException("Send operation not implemented for: " + cmd.getMessageType());
         }
 
         if (msg != null) {
-            System.out.println("[Client] 🚀 Sending " + msg.getClass().getSimpleName() + "...");
+            System.out.println("[Client] Sending " + msg.getClass().getSimpleName() + "...");
             SendAction sendAction = new SendAction("client", msg);
             sendAction.execute(state);
             state.getWorkflowTrace().addTlsAction(sendAction);
             
             TlsEventResult result = new TlsEventResult("SENT_OK", cmd.getMessageType(), Map.of());
             TlsYamlParser.writeTlsEvent(result, "tls_event.yaml");
-            System.out.println("[Client] ✅ Message sent successfully.");
+            System.out.println("[Client] Message sent successfully.");
         }
     }
 
-    // On garde un buffer de messages décodés au niveau de la classe
+    /** Internal buffer for storing received messages from a multi-message TLS flight */
     private java.util.Queue<ProtocolMessage> flightBuffer = new java.util.LinkedList<>();
 
     /**
-     * Executes a LISTEN action, managing TLS 1.3 Flights automatically.
+     * Executes a network LISTEN operation, managing multi-message flights.
+     * If the buffer is empty, it performs a bulk read from the socket.
+     * 
+     * @param cmd The command specifying the expected message type.
+     * @throws Exception If network reception fails.
      */
     private void executeListen(ProbCommand cmd) throws Exception {
         connect();
         String expectedType = cmd.getMessageType();
-        System.out.println("[Client] 📡 Listening for network messages (Expected: " + expectedType + ")...");
+        System.out.println("[Client] Listening for network messages (Expected: " + expectedType + ")...");
 
-        // Si notre buffer est vide, on doit lire le réseau
+        // Refresh flight buffer if empty
         if (flightBuffer.isEmpty()) {
-            System.out.println("[Client] 🌐 Reading from socket (Full TLS 1.3 Flight)...");
+            System.out.println("[Client] Reading from socket (Full TLS 1.3 Flight)...");
 
-            // 🌟 LA CORRECTION EST ICI 🌟
-            // On ordonne à TLS-Attacker de s'attendre à la volée complète. 
-            // C'est indispensable pour qu'il active le déchiffrement des messages 
-            // qui suivent le ServerHello dans le même paquet TCP !
+            // Instruct TLS-Attacker to expect the complete server flight.
+            // This is necessary to correctly handle encrypted messages following the ServerHello
+            // within the same TCP packet.
             ReceiveAction receiveAction = new ReceiveAction("client",
                 new ServerHelloMessage(),
                 new EncryptedExtensionsMessage(),
@@ -206,20 +216,17 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
             List<ProtocolMessage> received = receiveAction.getReceivedMessages();
 
             if (received != null && !received.isEmpty()) {
-                System.out.println("[Client] 📥 Received " + received.size() + " message(s) from flight.");
+                System.out.println("[Client] Received " + received.size() + " message(s) from flight.");
                 flightBuffer.addAll(received);
             }
         }
 
-        // On consomme le buffer (Un par un, pour nourrir l'Orchestrateur)
+        // Consume messages from the buffer one by one to feed the orchestrator
         if (!flightBuffer.isEmpty()) {
             ProtocolMessage msg = flightBuffer.poll();
-            System.out.println("[Client] 📦 Extracting from buffer: " + msg.getClass().getSimpleName() + " (" + flightBuffer.size() + " left)");
+            System.out.println("[Client] Extracting from buffer: " + msg.getClass().getSimpleName() + " (" + flightBuffer.size() + " left)");
             
-            // 1. Sauvegarde pour la comparaison finale (Legacy)
-            processReceivedMessage(msg);
-            
-            // 2. Formatage pour l'orchestrateur
+            // Format event for the model-based testing orchestrator
             String typeStr = msg.getClass().getSimpleName().replace("Message", "");
             
             Map<String, String> abstractData = null;
@@ -229,13 +236,13 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
             else if (msg instanceof FinishedMessage) abstractData = TlsMessageParser.parseFinished((FinishedMessage) msg);
             else if (msg instanceof AlertMessage) abstractData = TlsMessageParser.parseAlert((AlertMessage) msg);
 
-            // On envoie le message consommé à l'orchestrateur
+            // Report the consumed event to the orchestrator
             TlsEventResult result = new TlsEventResult("RECEIVED", typeStr, abstractData != null ? abstractData : Map.of());
             TlsYamlParser.writeTlsEvent(result, "tls_event.yaml");
-            System.out.println("[Client] 💾 Event saved for orchestrator: " + typeStr);
+            System.out.println("[Client] Event saved for orchestrator: " + typeStr);
             
         } else {
-            System.out.println("[Client] ⏳ No message received (Timeout or empty flight).");
+            System.out.println("[Client] No message received (Timeout or empty flight).");
             TlsEventResult result = new TlsEventResult("TIMEOUT", "NONE", Map.of());
             TlsYamlParser.writeTlsEvent(result, "tls_event.yaml");
         }
@@ -333,7 +340,6 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
             
             for (ProtocolMessage msg : receiveHandshake.getReceivedMessages()) {
                 System.out.println("  -> " + msg.toCompactString());
-                processReceivedMessage(msg);
             }
         } else {
             System.out.println("[Client] No handshake messages received (check for Alert).");
@@ -368,49 +374,6 @@ public class TLSAttackerFakeClient extends SystemUnderTest {
             } catch (Exception e) {
                 // Ignore closing errors
             }
-        }
-    }
-
-    /**
-     * Identifies the message type, extracts abstract data using TlsMessageParser,
-     * and saves it to a corresponding YAML file.
-     * * @param msg The received TLS message
-     */
-    private void processReceivedMessage(ProtocolMessage msg) {
-        Map<String, String> abstractData = null;
-        String fileName = null;
-        String rootKey = null;
-
-        if (msg instanceof ServerHelloMessage) {
-            abstractData = TlsMessageParser.parseServerHello((ServerHelloMessage) msg);
-            fileName = "src/main/resources/data/SUTServerHello.yaml";
-            rootKey = "serverHelloInformation";
-        } else if (msg instanceof EncryptedExtensionsMessage) {
-            abstractData = TlsMessageParser.parseEncryptedExtensions((EncryptedExtensionsMessage) msg);
-            fileName = "src/main/resources/data/SUTEncryptedExtensions.yaml";
-            rootKey = "encryptedExtensionsInformation";
-        } else if (msg instanceof CertificateMessage) {
-            abstractData = TlsMessageParser.parseCertificate((CertificateMessage) msg);
-            fileName = "src/main/resources/data/SUTCertificate.yaml";
-            rootKey = "certificateInformation";
-        } else if (msg instanceof CertificateVerifyMessage) {
-            abstractData = Map.of("signature", "valid"); 
-            fileName = "src/main/resources/data/SUTCertificateVerify.yaml";
-            rootKey = "certificateVerifyInformation";
-        } else if (msg instanceof FinishedMessage) {
-            abstractData = TlsMessageParser.parseFinished((FinishedMessage) msg);
-            fileName = "src/main/resources/data/SUTFinished.yaml";
-            rootKey = "finishedInformation";
-        } else if (msg instanceof AlertMessage) {
-            abstractData = TlsMessageParser.parseAlert((AlertMessage) msg);
-            fileName = "src/main/resources/data/SUTAlert.yaml";
-            rootKey = "alertInformation";
-        }
-
-        if (abstractData != null && fileName != null && rootKey != null) {
-            Map<String, Object> wrapped = Map.of(rootKey, abstractData);
-            TlsYamlParser.writeYaml(wrapped, fileName);
-            System.out.println("[Parser] " + msg.getClass().getSimpleName() + " saved to " + fileName);
         }
     }
 

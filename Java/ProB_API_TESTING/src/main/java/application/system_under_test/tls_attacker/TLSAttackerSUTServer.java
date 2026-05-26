@@ -121,25 +121,8 @@ public class TLSAttackerSUTServer extends SystemUnderTest {
                             (ClientHelloMessage) receiveAction
                                 .getReceivedMessages()
                                 .get(0);
-                        // Map<String, String> parsed = TlsMessageParser.parseClientHello(clientHello);
-                        // TlsYamlParser.writeYaml(
-                        //     parsed,
-                        //     "src/main/resources/data/SUTClientHello.yaml"
-                        // );
-
-                        try {
-                            Files.write(
-                                Path.of("src/main/resources/data/SUTClientHello.yaml"),
-                                clientHello.toString().getBytes(StandardCharsets.UTF_8)
-                            );
-                        } catch (IOException e) {
-                            System.err.println(
-                                "Error writing ClientHello to file: " + e.getMessage()
-                            );
-                        }
-
-                        // System.out.println(clientHello.toString());
-                        System.out.println("ClientHello received and saved.");
+                        
+                        System.out.println("ClientHello received.");
                     }
                 } catch (Exception e) {
                     System.err.println(

@@ -33,6 +33,11 @@ public class TestExaminer {
     private SystemUnderTest fakeClient;
     private String mode;
 
+    /**
+     * Initializes a new TestExaminer of the specified type.
+     * 
+     * @param type The type of test to perform (e.g., "tls" or "tlsTesting").
+     */
     public TestExaminer(String type) {
         Injector injector = Guice.createInjector(new MainModule());
         Api api = injector.getInstance(Api.class);
@@ -51,58 +56,68 @@ public class TestExaminer {
         }
     }
 
+    /**
+     * Executes the complete testing lifecycle.
+     * Loads the model, runs the test loop, and performs cleanup upon completion.
+     */
     public void runTest() {
-        System.out.println("-- Starting TLS Test --");
+        System.out.println("\n>>> INITIALIZING TLS TEST SUITE <<<");
         loadModel();
         runTestLoop();
-        System.out.println("Shutting down model...");
+        System.out.println("\n[SYSTEM] Shutting down model...");
         this.modelLoader.killModel();
-        System.out.println("-- TLS Test Finished --");      
+        System.out.println(">>> TLS TEST SUITE FINISHED <<<\n");      
     }
 
+    /**
+     * Main execution loop for formal model-based testing.
+     * Orchestrates the interaction between the ProB model and the System Under Test.
+     * Handles starting the SUT, model initialization, action evaluation, command generation,
+     * and processing network events back into the model.
+     */
     public void runTestLoop() {
-        System.out.println("\n======================================================");
+        System.out.println("======================================================");
         System.out.println("          STARTING FORMAL TEST LOOP");
-        System.out.println("======================================================\n");
+        System.out.println("======================================================");
         boolean testFinished = false;
         ModelExecuter executer = modelLoader.getModelExecuter();
         
         Process openssl = null;
         try {
-            System.out.println("[Orchestrator] 🚀 Starting OpenSSL server SUT...");
+            System.out.println("[SUT-INIT] Starting OpenSSL server SUT...");
             openssl = OpensslLauncher.startOpenSslServer(
                 "src/main/resources/session/server.crt", "src/main/resources/session/server.key", 8443
             );
             Thread.sleep(2000); // Wait for server to bind
         } catch (Exception e) {
-            System.err.println("[Orchestrator] ❌ Failed to start OpenSSL server: " + e.getMessage());
+            System.err.println("[ERROR] Failed to start OpenSSL server: " + e.getMessage());
             return;
         }
 
         try {
-            System.out.println("[Orchestrator] 🟢 Initializing B Model state...");
+            System.out.println("[MODEL] Initializing B Model state...");
             executer.initaliseMachine();
 
             int step = 1;
             while (!testFinished) {
-                System.out.println("\n--- STEP " + step + " ---");
+                System.out.println("\n+--- STEP #" + step + " -------------------------------------------");
                 String action = executer.evaluateNextAction();
-                System.out.println("[Orchestrator] 📋 Model Decision: " + action);
+                System.out.println("| [MODEL] Decision: " + action);
                 
                 if ("FINISHED".equals(action)) {
-                    System.out.println("[Orchestrator] ✅ Model reached terminal state. Test finished.");
+                    System.out.println("| [STATE] Model reached terminal state. Test successful.");
                     testFinished = true;
                     break;
                 }
 
                 if ("INTERNAL".equals(action)) {
-                    System.out.println("[Orchestrator] ⏩ Internal model transition detected. Advancing model without network I/O...");
+                    System.out.println("| [MODEL] Internal transition. Advancing state...");
                     executer.forwardInternalState();
                     step++;
-                    continue; // On passe directement à la step suivante !
+                    continue; 
                 }
 
-                System.out.println("[Orchestrator] 📝 Generating command for SUT...");
+                System.out.println("| [GEN] Generating YAML command for SUT...");
                 executer.generateCommandYaml(action, null);
 
                 if (fakeClient instanceof TLSAttackerFakeClient) {
@@ -111,16 +126,16 @@ public class TestExaminer {
                         try {
                             ProbCommand cmd = TlsYamlParser.parseProbCommand("prob_command.yaml");
                             cmdFile.delete();
-                            System.out.println("[Orchestrator] ⚡ Triggering TLS-Attacker: " + cmd.getAction() + " " + cmd.getMessageType());
+                            System.out.println("| [NET] Sending to SUT: " + cmd.getAction() + " " + cmd.getMessageType());
                             ((TLSAttackerFakeClient) fakeClient).executeCommand(cmd);
                         } catch (Exception e) {
-                            System.err.println("[Orchestrator] ❌ SUT Execution Error: " + e.getMessage());
+                            System.err.println("| [ERROR] SUT Execution Failure: " + e.getMessage());
                             break;
                         }
                     }
                 }
 
-                System.out.println("[Orchestrator] ⏳ Waiting for SUT event (tls_event.yaml)...");
+                System.out.println("| [NET] Waiting for SUT event (tls_event.yaml)...");
                 File eventFile = new File("tls_event.yaml");
                 int attempts = 0;
                 while (!eventFile.exists() && attempts < 30) {
@@ -143,43 +158,61 @@ public class TestExaminer {
                         event.setMessageType((String) data.get("messageType"));
                         event.setExtractedParameters((Map<String, String>) data.get("extractedParameters"));
                         
-                        System.out.println("[Orchestrator] 📥 Feeding event to Model: " + event.getMessageType() + " [" + event.getStatus() + "]");
+                        System.out.println("| [MODEL] Processing event: " + event.getMessageType() + " [" + event.getStatus() + "]");
                         executer.feedEventToModel(event);
                     } catch (Exception e) {
-                        System.err.println("[Orchestrator] ❌ Error processing event: " + e.getMessage());
-                        // If we fail to process the event, we should probably stop to avoid infinite loop
+                        System.err.println("| [ERROR] Event processing error: " + e.getMessage());
                         break;
                     }
                 } else {
-                    System.err.println("[Orchestrator] ⚠️ Timeout: No event received from SUT within 15s.");
+                    System.err.println("| [TIMEOUT] No event received from SUT (15s limit).");
                     break;
                 }
                 step++;
                 if (step > 50) {
-                    System.err.println("[Orchestrator] 🛑 Safety break: test loop exceeded 50 steps.");
+                    System.err.println("| [SAFETY] Test loop exceeded maximum step limit (50).");
                     break;
                 }
             }
+            System.out.println("+------------------------------------------------------\n");
         } finally {
             if (openssl != null) {
-                System.out.println("\n[Orchestrator] 🛑 Shutting down OpenSSL server...");
+                System.out.println("[SUT-EXIT] Shutting down OpenSSL server...");
                 openssl.destroy();
             }
         }
     }
 
+    /**
+     * Loads the B machine and initializes the ProB API.
+     */
     public void loadModel() {
         System.out.println("Testing TLS Model...");
         this.modelLoader.loadAndExecuteAPI();
         this.modelLoader.modelInformation();
     }
 
+    /**
+     * Stub for SUT creation.
+     */
     public void createSUTForServerHello() {}
+
+    /**
+     * Stub for SUT operation execution.
+     */
     public void executeSUTOperation() {}
+
+    /**
+     * Triggers the generation of Client and Server Hello messages in the model.
+     */
     public void testServerHello() {
         this.modelLoader.generateClientAndServerHello();
     }
 
+    /**
+     * Compares the YAML outputs between the SUT and the formal model.
+     * Uses the AbstractInformationComparator to determine if the behavior matches.
+     */
     public void compareResults() {
         System.out.println("Comparing YAML result");
         boolean match;
