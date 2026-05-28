@@ -1,51 +1,32 @@
-# Architecture d'Intégration Actuelle (Approche par Fichiers)
+# TLSModeling
 
-## 1. Point d'Entrée (`Main.java`)
-Initialisation globale de l'environnement de test.
+## Project Overview
 
-**Exécution de `main()` :**
-* `Security.addProvider()` -> Initialisation de BouncyCastle.
-* `new TestExaminer("tls")` -> Instanciation de l'orchestrateur.
-* `examiner.runTest()` -> Lancement de la séquence.
+This project focuses on modeling and testing the TLS protocol using formal methods (ProB) and network testing tools (TLS-Attacker).
 
----
+### Legacy Code
+The `Python/` directory contains old code from previous iterations of the project. It is kept for historical reference but is no longer part of the main development.
 
-## 2. Le Chef d'Orchestre (`TestExaminer.java`)
-Gère le cycle de vie du test et fait le pont entre le modèle formel (ProB) et le réseau.
+### Research & Learning
+The `Java/TLSAttackerTest` project was created specifically to understand the inner workings and capabilities of the TLS-Attacker framework. It serves as a testing ground for learning how to use the API effectively before integrating it into the core project.
 
-**Déroulement de `runTest()` :**
-* **A. Phase Modèle (Génération)**
-  * `loadModel()` -> `modelLoader.loadAndExecuteAPI()` : Charge le modèle B.
-  * `modelLoader.generateClientHello()` : ProB calcule les paramètres et les exporte dans `ModelClientHello.yaml`.
-* **B. Phase Environnement (Setup)**
-  * `OpensslLauncher.startOpenSslServer(8443)` : Lance le SUT cible en tâche de fond.
-* **C. Phase Réseau (Exécution)**
-  * `fakeClient.createSUT()` : Délègue l'action à TLS-Attacker (voir section 3).
-* **D. Phase Environnement (Teardown)**
-  * `openssl.destroy()` : Ferme le processus du serveur cible.
-* **E. Phase Modèle (Validation)**
-  * `modelLoader.validateServerHelloFromSUT(".../SUTServerHello.yaml")` : ProB lit la réponse réseau sur le disque et valide l'état.
+## Core Project: ProB_API_TESTING
 
----
+The heart of the project resides in `Java/ProB_API_TESTING`. This application orchestrates the interaction between a formal B model and a real-world System Under Test (SUT). For more detailed information, please refer to the README within the `Java/ProB_API_TESTING` directory.
 
-## 3. Le Traducteur Réseau (`TLSAttackerFakeClient.java`)
-Agit comme un script "Batch" : Lit un YAML -> Exécute le réseau -> Écrit un YAML.
+### Architecture
+- **Main Entry Point (`Main.java`)**: Initializes the environment and launches the `TestExaminer`.
+- **Orchestrator (`TestExaminer.java`)**: This is the central component that manages the test lifecycle. It manages the communication between:
+    - **ProB**: Used to generate expected message parameters based on the formal model and to validate the responses received from the network.
+    - **TLS-Attacker**: Used to forge and send network packets based on ProB's output, and to capture server responses for further validation.
 
-**Déroulement de `createSUT()` :**
-* **A. Lecture des directives (Input ProB)**
-  * `TlsYamlParser.readYamlAsObject(".../ModelClientHello.yaml")`
-  * Extraction de la sous-section `clientHelloInformation`.
-* **B. Forgeage du Paquet (TLS-Attacker)**
-  * `new Config()` + `setAdd...Extension(true)` : Configuration manuelle des couches TLS 1.3.
-  * `TlsMessageBuilder.configureFromYaml(...)` : Injecte les données du YAML dans la config.
-  * `new ClientHelloMessage(config)` : Instanciation du message logique.
-* **C. Exécution Boîte Noire (Workflow Automatisé)**
-  * `new WorkflowTrace()`
-  * `trace.addTlsAction(new SendAction(clientHello))`
-  * `trace.addTlsAction(new ReceiveAction(new ServerHelloMessage()))`
-  * `new DefaultWorkflowExecutor(state).executeWorkflow()` : Le framework gère TCP et Record Layer en arrière-plan.
-* **D. Extraction & Sauvegarde (Output ProB)**
-  * `state.getWorkflowTrace().getTlsActions().get(1)` : Récupère la `ReceiveAction` de l'historique.
-  * Vérification du type d'objet reçu (`AlertMessage` vs `ServerHelloMessage`).
-  * Extraction des paramètres cryptographiques (`random`, `legacy_version`, `cipher_suites`) vers une `LinkedHashMap`.
-  * `TlsYamlParser.writeYaml(wrapped, ".../SUTServerHello.yaml")` : Écriture sur le disque pour que ProB puisse le lire à l'étape 2.E.# TLSModeling
+### Current Status
+At present, the system is primarily configured to work with an **OpenSSL server** as the SUT. Because the integration is focused on specific message exchanges, some states in the formal ProB model are currently "skipped" during the execution to align with the supported testing flows.
+
+## Execution
+
+To run the project, you can use the provided shell scripts:
+- `run_test.sh` (at the project root)
+- `Java/ProB_API_TESTING/run.sh`
+
+Both scripts are used to launch the main testing sequence, with the root script delegating to the Java project.

@@ -7,13 +7,13 @@ SPECIFIC INFORMATION:
 
 ## Introduction
 
-**TLSModeling** is a Java-based framework that applies **Model-Based Testing (MBT)** to verify the correctness and compliance of **TLS 1.3** protocol implementations. The project integrates formal methods, symbolic modeling, and dynamic testing to automatically generate test cases based on a **B-Method specification** of the TLS handshake. These test cases are then executed against real-world TLS implementations such as **TLS-Attacker** and **Bouncy Castle**.
+**TLSModeling** is a Java-based framework that applies **Model-Based Testing (MBT)** to verify the correctness and compliance of **TLS 1.3** protocol implementations. The project integrates formal methods, symbolic modeling, and dynamic testing to automatically generate test cases based on a **B-Method specification** of the TLS handshake. These test cases are then executed against real-world TLS implementations such as **TLS-Attacker**, **Bouncy Castle**, and **OpenSSL**.
 
-- [x] TLS-Attacker's Bouncy Castle
+- [x] TLS-Attacker's Bouncy Castle (Operational but legacy; pre-dates current orchestration)
 - [ ] Bouncy Castle
-- [x] Openssl
+- [x] Openssl (Main SUT for current orchestration)
 
-The goal of this project is to assess whether the System Under Test (SUT) behaves in accordance with the model—particularly during the TLS 1.3 handshake phase—by comparing the abstracted outputs of both model and SUT using serialized YAML representations.
+The goal of this project is to assess whether the System Under Test (SUT) behaves in accordance with the model—particularly during the TLS 1.3 handshake phase—by comparing the abstracted outputs of both model and SUT using serialized YAML representations. Note that during current execution with OpenSSL, some ProB states may be skipped to match the supported testing flows because OpenSSL doesn't wait the model B.
 
 ## Methodology
 
@@ -27,12 +27,11 @@ This framework follows a **Model-Based Testing** approach, which involves:
 
 ## Technologies Used
 
-- **Java 11+** – The primary programming language for test execution and infrastructure.
+- **Java 21** – The primary programming language for test execution and infrastructure (configured in `run.sh`).
 - **ProB Java API** – Executes the formal B specification and generates symbolic traces.
 - **B-Method / B-Machine** – Formal method used to describe the abstract model of TLS 1.3.
 - **TLS-Attacker** – A flexible framework for crafting and parsing TLS messages and testing real-world TLS libraries.
 - **Bouncy Castle** – Java cryptography and TLS provider used as a sample implementation.
-- **Google Guice** – For dependency injection and modular configuration.
 - **SnakeYAML** – For parsing and generating YAML-formatted test data.
 
 ## Project Structure
@@ -52,29 +51,35 @@ application/
 
 Before building, ensure you have:
 
-- Java 11 or higher
+- Java 21 or higher
 - Maven
 - TLS-Attacker core and utilities
 - ProB 2.0 Java API (download separately and configure if needed)
 - Bouncy Castle provider
-- SnakeYAML and Guice (added as Maven dependencies)
-- Openssl (installed on machine)
+- SnakeYAML (added as Maven dependency)
+- Openssl (installed on machine, managed automatically by `OpensslLauncher`)
 
 ## Setup and Compilation
 
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/ohnoitsalex/TLSModeling.git
+git clone https://github.com/MarcFrappierUdeS/TLSModeling.git
 cd TLSModeling/Java/ProB_API_TESTING
 ```
 
 2. **Build the project**
 
+You can use the provided `run.sh` script which handles the environment (Java 21) and the build process:
+
 ```bash
-mvn install
-mvn compile
-mvn dependency:copy-dependencies
+./run.sh
+```
+
+Alternatively, manually build with Maven:
+
+```bash
+mvn clean compile
 ```
 
 3. **Ensure that the B-model specification files** (`TLS_specification.mch`, `TLS_specificationTesting.mch`) are located in:
@@ -91,22 +96,27 @@ To start the test process:
 mvn exec:java -Dexec.mainClass="application.Main"
 ```
 
-This will:
-- Load and execute the B-model using the ProB API
-- Generate abstract TLS messages such as ClientHello and ServerHello
-- Launch the selected SUT (default is TLS-Attacker)
-- Use the ProB Java API (model checker) to verify if server implementation is correct.
+The project is **fully autonomous**: it automatically launches and manages its own OpenSSL server instance via `OpensslLauncher`. There is no need to manually start OpenSSL beforehand.
 
-## YAML-Based Testing
+During execution, the system will:
+- Load and execute the B-model using the ProB API.
+- Generate abstract TLS messages.
+- Launch the SUT (OpenSSL) and handle network exchanges via TLS-Attacker.
+- Verify the server implementation's correctness using the ProB Java API.
 
-Handshake messages are abstracted and saved to YAML files:
+## YAML-Based Communication
 
-- `ModelClientHello.yaml` — from the model
-- `ModelServerHello.yaml`
-- `SUTClientHello.yaml` — from the system under test
-- `SUTServerHello.yaml`
+The project uses YAML files for different purposes:
 
-A comparator analyzes both versions and prints any detected inconsistencies.
+### Active Transient Buffers
+For real-time orchestration between the formal model (ProB) and the system under test, the following files are used as transient buffers:
+- `prob_command.yaml`: Used to send commands from the orchestrator to the network components.
+- `tls_event.yaml`: Used by the network components to report events and responses back to the orchestrator.
+
+These files are created and consumed dynamically during the test execution and are not intended for long-term storage.
+
+### Legacy Data Files
+The files located in `src/main/resources/data/` (e.g., `ModelClientHello.yaml`, `SUTServerHello.yaml`, etc.) are artifacts from previous development iterations. While they are still present in the repository and referenced in some legacy paths, they represent a different communication mechanism than the transient buffer approach used in the current active orchestration.
 
 ## Switching System Under Test (SUT)
 
@@ -163,25 +173,17 @@ The generated documentation includes:
 - **Usage examples** and implementation notes
 - **Cross-references** between related classes
 
+## Manual OpenSSL usage (Legacy/Debug)
 
-
-  
-## How to use openssl
+If you need to manually interact with OpenSSL for debugging:
 
 Generate pair of key and cert : 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -sha256 -days 365   
 ```
 
+Run openssl server : 
 
-Run openssl server in background : 
-
-```bash
-openssl s_server -cert cert.pem -key key.pem -tls1_3 -port 8443 -msg -ciphersuites "TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384"
-```
-ou
 ```bash
 openssl s_server -cert cert.pem -key key.pem -tls1_3 -port 8443 -msg
 ```
-
-Run java project.
