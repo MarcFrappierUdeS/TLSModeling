@@ -59,7 +59,7 @@ Before building, ensure you have:
 - SnakeYAML (added as Maven dependency)
 - Openssl (installed on machine, managed automatically by `OpensslLauncher`)
 
-## Setup and Compilation
+## Setup, Compilation and run
 
 1. **Clone the repository**
 
@@ -87,8 +87,6 @@ mvn clean compile
 ```bash
 src/main/resources/models/
 ```
-
-## How to Run
 
 To start the test process:
 
