@@ -25,52 +25,57 @@ At present, the system is primarily configured to work with an **OpenSSL server*
 
 ## Installation
 
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
+Follow these instructions to get a copy of the project up and running on your local machine.
 
-### Prerequisites
+### 1. Prerequisites
 
 Before installing, ensure you have the following tools installed on your system:
-* **Java JDK 11 or higher** (Ensure `JAVA_HOME` is correctly configured)
+
+* **Java JDK 21 or higher** (Ensure `JAVA_HOME` is correctly configured)
 * **Maven** (For managing Java dependencies)
 * **Git**
 * **OpenSSL** (Installed locally to act as the System Under Test)
 
-### Installation
+### 2. Clone the repository
 
-1. **Clone the repository** First, clone the project repository from Git using the following command:
-   
-   ```bash
-   git clone https://github.com/MarcFrappierUdeS/TLSModeling.git
-   cd TLSModeling
-   ```
-2. **Clone the repository** Grant execution permissions to scripts :
-  
-   ```bash
-   chmod +x run_test.sh
-   chmod +x Java/ProB_API_TESTING/run.sh
-   ```
-3. **Build the Java Project** Navigate to the core Java directory and build the project using Maven to download all necessary dependencies (ProB API, TLS-Attacker, etc.):
+First, clone the project repository and grant execution permissions to the scripts:
 
-   ```bash
-   cd Java/ProB_API_TESTING
-   mvn clean install
-   cd ../..
-   ```
-   
+```bash
+git clone https://github.com/MarcFrappierUdeS/TLSModeling.git
+cd TLSModeling
+chmod +x run_test.sh
+chmod +x Java/ProB_API_TESTING/run.sh
 
-### Running the System Under Test (SUT)
+```
 
-Before launching the main test execution script, you need to ensure an OpenSSL server is running locally on the expected port (refer to the configuration files or Main.java for the specific port, typically 4433 or 4443):
+### 3. Execution
 
-  ```bash
-  # Example to launch a local OpenSSL server supporting TLS 1.3
-  openssl s_server -key key.pem -cert cert.pem -accept 4433 -tls1_3
-  ```
-  
-## Execution
+To run the project, you have two main options depending on your preference:
 
-To run the project, you can use the provided shell scripts:
-- `run_test.sh` (at the project root)
-- `Java/ProB_API_TESTING/run.sh`
+**Either you use the all-in-one script:**
+This is the easiest method. The `run.sh` script will automatically compile the code and execute the main testing sequence.
 
-Both scripts are used to launch the main testing sequence, with the root script delegating to the Java project.
+```bash
+cd Java/ProB_API_TESTING
+./run.sh
+
+```
+
+**Or you do it manually (compile then execute):**
+If you prefer not to use the all-in-one script, you **must compile the project first** before running it.
+
+```bash
+cd Java/ProB_API_TESTING
+mvn clean compile
+
+```
+
+Once compiled, you can execute the code using the root script:
+
+```bash
+cd ../..
+./run_test.sh
+
+```
+
+*(Alternatively, you can also execute it entirely manually via Maven by running `mvn exec:java -Dexec.mainClass="application.Main"` inside the Java directory).*

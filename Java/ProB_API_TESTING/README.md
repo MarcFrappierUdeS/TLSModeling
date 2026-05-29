@@ -120,17 +120,22 @@ The files located in `src/main/resources/data/` (e.g., `ModelClientHello.yaml`, 
 
 ## Switching System Under Test (SUT)
 
-Edit `application/config/Config.java` to select the client and server classes to use:
+**⚠️ Important Note:** Following recent modifications to the `test_examiner`, the dynamic switching of clients and servers is currently restricted. 
 
-```Java
+At this time, you must maintain the following configuration in `application/config/Config.java`:
+
+```java
 public static final String CLIENTCLASSNAME =
     "application.system_under_test.tls_attacker.TLSAttackerFakeClient";
 
-public static final String SERVERCLASSNAME =
-    "application.system_under_test.tls_attacker.TLSAttackerSUTServer";
 ```
 
-Alternative implementations using Bouncy Castle are available and can be switched in similarly.
+Please note the current limitations:
+
+* **Client:** `TLSAttackerFakeClient` is the **only** fully functional client supported by the updated test examiner.
+* **Server (SUT):** Only **OpenSSL** is currently supported and validated as the System Under Test.
+
+*(Note: References to alternative implementations using Bouncy Castle in older versions of this project are currently relics. Bouncy Castle is not supported in the current functional loop and remains a work in progress for future releases).*
 
 ## Generating Documentation
 
