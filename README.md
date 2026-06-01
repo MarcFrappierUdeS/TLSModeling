@@ -10,6 +10,12 @@ The `Python/` directory contains old code from previous iterations of the projec
 ### Research & Learning
 The `Java/TLSAttackerTest` project was created specifically to understand the inner workings and capabilities of the TLS-Attacker framework. It serves as a testing ground for learning how to use the API effectively before integrating it into the core project.
 
+### B Model
+
+Although there is a `ProB` directory containing various B models at the root of the project, the model used by the `ProB_API_TESTING` project is duplicated in the subdirectory `Java/ProB_API_TESTING/src/main/resources/models`. 
+
+**⚠️ Important:** The B model used by the project has been slightly modified compared to the one present in the `ProB` folder.
+
 ## Core Project: ProB_API_TESTING
 
 The heart of the project resides in `Java/ProB_API_TESTING`. This application orchestrates the interaction between a formal B model and a real-world System Under Test (SUT). For more detailed information, please refer to the README within the `Java/ProB_API_TESTING` directory.
